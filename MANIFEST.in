@@ -1,2 +1,2 @@
 include README.md
-include jsbgym/*.xml
+include jsbgym_m/*.xml

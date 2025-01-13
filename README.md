@@ -1,22 +1,22 @@
-# JSBGym
+# jsbgym_m
 
 [![Python: 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![PyPI Version](https://img.shields.io/pypi/v/jsbgym)](https://pypi.org/project/jsbgym)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/jsbgym)](https://pypistats.org/packages/jsbgym)
+[![PyPI Version](https://img.shields.io/pypi/v/jsbgym_m)](https://pypi.org/project/jsbgym_m)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/jsbgym_m)](https://pypistats.org/packages/jsbgym_m)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-JSBGym provides reinforcement learning environments for the control of fixed-wing aircraft using the JSBSim flight dynamics model. The package's environments implement the Farama-Foundation's Gymnasium interface allowing environments to be created and interacted with.
+jsbgym_m provides reinforcement learning environments for the control of fixed-wing aircraft using the JSBSim flight dynamics model. The package's environments implement the Farama-Foundation's Gymnasium interface allowing environments to be created and interacted with.
 
-![Example](https://github.com/sryu1/jsbgym/blob/main/docs/J3.gif?raw=true)
+![Example](https://github.com/sryu1/jsbgym_m/blob/main/docs/J3.gif?raw=true)
 
 ## Setup
 
 ### Windows
 
-Open a terminal and install jsbgym via pip:
+Open a terminal and install jsbgym_m via pip:
 
 ```console
-pip install jsbgym
+pip install jsbgym_m
 ```
 
 To render the environment with FlightGear, download and install it from [here](https://sourceforge.net/projects/flightgear/). Make sure the FlightGear bin directory is in PATH (Usually `C:\Program Files\FlightGear 2020.3\bin`) and if not already existant, add a system variable called `FG_ROOT` with the FG data folder as it's value (Usually `C:\Program Files\FlightGear 2020.3\data`).
@@ -30,10 +30,10 @@ fgfs --version
 
 ### Linux
 
-Open a terminal and install jsbgym via pip:
+Open a terminal and install jsbgym_m via pip:
 
 ```console
-pip install jsbgym
+pip install jsbgym_m
 ```
 
 Rendering with some modes will require additional packages:
@@ -65,7 +65,7 @@ fgfs --version
 ## Getting Started
 
 ```python
-import jsbgym
+import jsbgym_m
 import gymnasium as gym
 
 env = gym.make(ENV_ID)
@@ -104,7 +104,7 @@ All aircraft except the Cessna 172P requires the aircraft to be downloaded via t
 
 ### Task
 
-JSBGym implements two tasks for controlling the altitude and heading of aircraft:
+jsbgym_m implements two tasks for controlling the altitude and heading of aircraft:
 
 * **HeadingControlTask** aircraft must fly in a straight line, maintaining its initial altitude and direction of travel (heading)
 * **TurnHeadingControlTask** aircraft must turn to face a random target heading while maintaining their initial altitude
@@ -153,7 +153,7 @@ env.render()
 
 ## State and Action Space
 
-JSBGym's environments have a continuous state and action space. The state is a 11-tuple:
+jsbgym_m's environments have a continuous state and action space. The state is a 11-tuple:
 
  ```python
 (name='position/h-sl-ft', description='altitude above mean sea level [ft]', min=-1400, max=85000)
