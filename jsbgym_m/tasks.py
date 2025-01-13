@@ -301,6 +301,7 @@ class HeadingControlTask(FlightTask):
         self.extra_state_variables = (
             self.altitude_error_ft,
             self.track_error_deg,
+            prp.sideslip_deg,
         )
         self.state_variables = (
             FlightTask.base_state_variables + self.extra_state_variables
