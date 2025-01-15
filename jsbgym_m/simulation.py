@@ -49,6 +49,9 @@ class Simulation(object):
         self.jsbsim.disable_output()
         self.wall_clock_dt = None
 
+        # for prop in self.jsbsim.get_property_catalog():
+        #     print((prop))
+
     def __getitem__(self, prop: Union[prp.BoundedProperty, prp.Property]) -> float:
         """
         Retrieves specified simulation property.

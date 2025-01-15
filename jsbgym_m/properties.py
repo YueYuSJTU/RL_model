@@ -35,6 +35,14 @@ dist_travel_m = Property(
     "position/distance-from-start-mag-mt",
     "distance travelled from starting position [m]",
 )
+dist_travel_lon_m = Property(
+    "position/distance-from-start-lon-mt",
+    "logarithmic distance travelled from starting position [m]",
+)
+dist_travel_lat_m = Property(
+    "position/distance-from-start-lat-mt",
+    "lateral distance travelled from starting position [m]",
+)
 
 # velocities
 u_fps = BoundedProperty(
@@ -158,6 +166,12 @@ class Vector2(object):
     @staticmethod
     def from_sim(sim: "simulation.Simulation") -> "Vector2":
         return Vector2(sim[v_east_fps], sim[v_north_fps])
+    
+    def Norm(self):
+        return math.sqrt(self.x**2 + self.y**2)
+    
+    def __sub__(self, other: "Vector2") -> "Vector2":
+        return Vector2(self.x - other.x, self.y - other.y)
 
 
 class GeodeticPosition(object):
