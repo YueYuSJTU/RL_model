@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import jsbgym_m.properties as prp
 from jsbgym_m.aircraft import Aircraft
 from jsbgym_m.simulation import Simulation
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Tuple, List
 
 
 class AxesTuple(NamedTuple):
@@ -48,6 +48,7 @@ class FigureVisualiser(object):
         self.figure: plt.Figure = None
         self.axes: AxesTuple = None
         self.value_texts: Tuple[plt.Text] = None
+        self.positions: List[Tuple[float, float, float]] = []
 
     def plot(self, sim: Simulation) -> None:
         """
@@ -222,6 +223,13 @@ class FigureVisualiser(object):
         # update each Text object with latest value
         for prop, text in zip(self.print_props, self.value_texts):
             text.set_text(f"{sim[prop]:.4g}")
+        # save current position for plotting
+        # self.positions.append(
+        #     (sim[prp.lat_geod_deg], sim[prp.lng_geoc_deg], sim[prp.altitude_sl_ft])
+        # )
+        self.positions.append(
+            (sim[prp.ecef_x_ft], sim[prp.ecef_y_ft], sim[prp.ecef_z_ft])
+        )
 
     def _plot_control_states(self, sim: Simulation, all_axes: AxesTuple):
         control_surfaces = [prp.aileron_left, prp.elevator, prp.throttle, prp.rudder]
@@ -257,6 +265,29 @@ class FigureVisualiser(object):
         all_axes.axes_rudder.plot(
             [rud_cmd], [0], "bo", mfc="none", markersize=10, clip_on=False
         )
+    
+    def plot_position(self, target = None):
+        """
+        Plots the positions recorded during the simulation.
+        """
+        if not self.positions:
+            print("No positions to plot.")
+            return
+
+        lats, longs, alts = zip(*self.positions)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(lats, longs, alts, label='Position')
+        ax.scatter(lats[0], longs[0], alts[0], label='Start', color='r')
+        ax.scatter(lats[-1], longs[-1], alts[-1], label='End', color='b')
+        if target:
+            ax.scatter(target[0], target[1], target[2], label='Target', color='g')
+        ax.set_xlabel('x-Position')
+        ax.set_ylabel('y-Position')
+        ax.set_zlabel('Altitude')
+        ax.legend()
+        plt.show(block = True)
 
 
 class GraphVisualiser(object):

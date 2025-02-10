@@ -31,6 +31,9 @@ lat_geod_deg = BoundedProperty(
 lng_geoc_deg = BoundedProperty(
     "position/long-gc-deg", "geodesic longitude [deg]", -180, 180
 )
+ecef_x_ft = Property("position/ecef-x-ft", "ECEF x-coordinate [ft]")
+ecef_y_ft = Property("position/ecef-y-ft", "ECEF y-coordinate [ft]")
+ecef_z_ft = Property("position/ecef-z-ft", "ECEF z-coordinate [ft]")
 dist_travel_m = Property(
     "position/distance-from-start-mag-mt",
     "distance travelled from starting position [m]",

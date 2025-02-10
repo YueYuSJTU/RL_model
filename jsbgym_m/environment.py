@@ -97,6 +97,16 @@ class JsbSimEnv(gym.Env):
             self.sim, action, self.sim_steps_per_agent_step
         )
         observation = np.array(state)
+
+        if self.render_mode == "human" and terminated:
+            if self.task.target_Xposition is not None:
+                target = [self.task._get_target_position("x"), 
+                          self.task._get_target_position("y"),
+                          self.task._get_target_position("z")]
+                self.figure_visualiser.plot_position(target)
+            else:
+                self.figure_visualiser.plot_position()
+
         return observation, reward, terminated, False, info
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):

@@ -128,12 +128,13 @@ class TrajectoryTask(FlightTask):
     INITIAL_HEADING_DEG = 270
     DEFAULT_EPISODE_TIME_S = 60.0
     ALTITUDE_SCALING_FT = 150
-    TRACK_ERROR_SCALING_DEG = 8
+    POSITION_SCALING_MT = 8
     ACTION_PENALTY_SCALING = 10000
     # ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
     # SIDESLIP_ERROR_SCALING_DEG = 3.0
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_ALTITUDE_DEVIATION_FT = 1000  # terminate if altitude error exceeds this
+    NAVIGATION_TOLERANCE = 50       # terminate if relative error is less than this
     target_Xposition = BoundedProperty(
         "target/positionX-mt",
         "desired track [m]",
@@ -214,7 +215,7 @@ class TrajectoryTask(FlightTask):
                 state_variables=self.state_variables,
                 target=0.0,
                 is_potential_based=False,
-                scaling_factor=self.TRACK_ERROR_SCALING_DEG,
+                scaling_factor=self.POSITION_SCALING_MT,
             ),
             rewards.AsymptoticErrorComponent(
                 name="action_penalty",
@@ -296,7 +297,7 @@ class TrajectoryTask(FlightTask):
         self._decrement_steps_left(sim)
 
     def _update_position_error(self, sim: Simulation):
-        position = prp.Vector2(sim[prp.dist_travel_lon_m], sim[prp.dist_travel_lat_m])
+        position = prp.Vector2(sim[prp.ecef_x_ft], sim[prp.ecef_y_ft])
         target_position = prp.Vector2(sim[self.target_Xposition], sim[self.target_Yposition])
         error_mt = (position - target_position).Norm()
         sim[self.position_error_mt] = error_mt
@@ -316,11 +317,14 @@ class TrajectoryTask(FlightTask):
         state_quality = sim[self.last_assessment_reward]
         # TODO: issues if sequential?
         state_out_of_bounds = state_quality < self.MIN_STATE_QUALITY
-        return terminal_step or state_out_of_bounds or self._altitude_out_of_bounds(sim)
+        return terminal_step or state_out_of_bounds or self._altitude_out_of_bounds(sim) or self._arrive_at_navigation_point(sim)
 
     def _altitude_out_of_bounds(self, sim: Simulation) -> bool:
         altitude_error_ft = sim[self.altitude_error_ft]
         return abs(altitude_error_ft) > self.MAX_ALTITUDE_DEVIATION_FT
+    
+    def _arrive_at_navigation_point(self, sim: Simulation) -> bool:
+        return sim[self.position_error_mt] < self.NAVIGATION_TOLERANCE
 
     def _get_out_of_bounds_reward(self, sim: Simulation) -> rewards.Reward:
         """
@@ -343,15 +347,20 @@ class TrajectoryTask(FlightTask):
         super()._new_episode_init(sim)
         sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
         sim[self.steps_left] = self.steps_left.max
+        self.init_ecef_position = [sim[prp.ecef_x_ft], 
+                                   sim[prp.ecef_y_ft], 
+                                   sim[prp.ecef_z_ft]]
         sim[self.target_Xposition] = self._get_target_position("x")
         sim[self.target_Yposition] = self._get_target_position("y")
 
     def _get_target_position(self, flag: str) -> float:
         # use the same, initial heading every episode
         if flag == "x":
-            return self.TARGET_xPOSITION
+            return self.TARGET_xPOSITION + self.init_ecef_position[0]
         elif flag == "y":
-            return self.TARGET_yPOSITION
+            return self.TARGET_yPOSITION + self.init_ecef_position[1]
+        elif flag == "z":
+            return self.init_ecef_position[2]
         else:
             raise ValueError(f"Unsupported flag in get target position: {flag}")
 
