@@ -156,13 +156,14 @@ class FlightTask(Task, ABC):
         terminated = self._is_terminal(sim)
         truncated = False
         reward = self.assessor.assess(state, self.last_state, terminated)
+        reward_components = self.assessor.assess_components(state, self.last_state, terminated)
         if terminated:
             reward = self._reward_terminal_override(reward, sim)
         if self.debug:
             self._validate_state(state, terminated, truncated, action, reward)
         self._store_reward(reward, sim)
         self.last_state = state
-        info = {"reward": reward}
+        info = {"reward": reward_components}
 
         return state, reward.agent_reward(), terminated, False, info
 

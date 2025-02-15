@@ -98,14 +98,21 @@ class JsbSimEnv(gym.Env):
         )
         observation = np.array(state)
 
+        # save reward components from info
+        if self.render_mode == "human":
+            self.figure_visualiser.save_reward_components(info["reward"])
+
+        # plot trajectory
         if self.render_mode == "human" and terminated:
             if self.task.target_Xposition is not None:
                 target = [self.task._get_target_position("x"), 
                           self.task._get_target_position("y"),
                           self.task._get_target_position("z")]
                 self.figure_visualiser.plot_position(target)
+                self.figure_visualiser.plot_reward_components()
             else:
                 self.figure_visualiser.plot_position()
+                self.figure_visualiser.plot_reward_components()
 
         return observation, reward, terminated, False, info
 

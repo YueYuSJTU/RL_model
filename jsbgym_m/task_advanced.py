@@ -121,29 +121,31 @@ class TrajectoryTask(FlightTask):
     control the trajectory of an aircraft.
     """
 
-    TARGET_xPOSITION = 2000
-    TARGET_yPOSITION = 8000
-    THROTTLE_CMD = 0.8
+    TARGET_xPOSITION_FT = 2000
+    TARGET_yPOSITION_FT = 8000
+    TARGET_zPOSITION_FT = 0
+    THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
     INITIAL_HEADING_DEG = 270
     DEFAULT_EPISODE_TIME_S = 60.0
-    ALTITUDE_SCALING_FT = 150
-    POSITION_SCALING_MT = 8
-    ACTION_PENALTY_SCALING = 10000
-    # ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
-    # SIDESLIP_ERROR_SCALING_DEG = 3.0
+    ALTITUDE_SCALING_FT = 10
+    POSITION_SCALING_MT = 700
+    ACTION_PENALTY_SCALING = 0.15
+    ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
+    SIDESLIP_ERROR_SCALING_DEG = 3.0
+    VERTICAL_SPEED_SCALING_FPS = 1
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_ALTITUDE_DEVIATION_FT = 1000  # terminate if altitude error exceeds this
     NAVIGATION_TOLERANCE = 50       # terminate if relative error is less than this
     target_Xposition = BoundedProperty(
-        "target/positionX-mt",
-        "desired track [m]",
+        "target/positionX-ft",
+        "desired track [ft]",
         -10000,
         10000,
     )
     target_Yposition = BoundedProperty(
-        "target/positionY-mt",
-        "desired track [m]",
+        "target/positionY-ft",
+        "desired track [ft]",
         -10000,
         10000,
     )
@@ -184,7 +186,8 @@ class TrajectoryTask(FlightTask):
         self.extra_state_variables = (
             self.altitude_error_ft,
             self.position_error_mt,
-            # prp.sideslip_deg,
+            prp.sideslip_deg,
+            prp.v_down_fps,
         )
         self.state_variables = (
             FlightTask.base_state_variables + self.action_variables
@@ -217,14 +220,22 @@ class TrajectoryTask(FlightTask):
                 is_potential_based=False,
                 scaling_factor=self.POSITION_SCALING_MT,
             ),
-            rewards.AsymptoticErrorComponent(
-                name="action_penalty",
-                prop=prp.elevator_cmd,
-                state_variables=self.state_variables,
-                target=0.0,
-                is_potential_based=False,
-                scaling_factor=self.ACTION_PENALTY_SCALING,
-            ),
+            # rewards.AsymptoticErrorComponent(
+            #     name="action_penalty",
+            #     prop=prp.elevator_cmd,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=False,
+            #     scaling_factor=self.ACTION_PENALTY_SCALING,
+            # ),
+            # rewards.AsymptoticErrorComponent(
+            #     name="vertival_speed",
+            #     prop=prp.v_down_fps,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=False,
+            #     scaling_factor=self.VERTICAL_SPEED_SCALING_FPS,
+            # ),
         )
         return base_components
     
@@ -240,33 +251,35 @@ class TrajectoryTask(FlightTask):
                 shaping_components,
                 positive_rewards=self.positive_rewards,
             )
+        # else:
+        #     raise ValueError(f"Unsupported shaping type: {shaping}")
+        else:
+            wings_level = rewards.AsymptoticErrorComponent(
+                name="wings_level",
+                prop=prp.roll_rad,
+                state_variables=self.state_variables,
+                target=0.0,
+                is_potential_based=True,
+                scaling_factor=self.ROLL_ERROR_SCALING_RAD,
+            )
+            no_sideslip = rewards.AsymptoticErrorComponent(
+                name="no_sideslip",
+                prop=prp.sideslip_deg,
+                state_variables=self.state_variables,
+                target=0.0,
+                is_potential_based=True,
+                scaling_factor=self.SIDESLIP_ERROR_SCALING_DEG,
+            )
+            potential_based_components = (wings_level, no_sideslip)
+
+        if shaping is Shaping.EXTRA:
+            return assessors.AssessorImpl(
+                base_components,
+                potential_based_components,
+                positive_rewards=self.positive_rewards,
+            )
         else:
             raise ValueError(f"Unsupported shaping type: {shaping}")
-        # else:
-        #     wings_level = rewards.AsymptoticErrorComponent(
-        #         name="wings_level",
-        #         prop=prp.roll_rad,
-        #         state_variables=self.state_variables,
-        #         target=0.0,
-        #         is_potential_based=True,
-        #         scaling_factor=self.ROLL_ERROR_SCALING_RAD,
-        #     )
-        #     no_sideslip = rewards.AsymptoticErrorComponent(
-        #         name="no_sideslip",
-        #         prop=prp.sideslip_deg,
-        #         state_variables=self.state_variables,
-        #         target=0.0,
-        #         is_potential_based=True,
-        #         scaling_factor=self.SIDESLIP_ERROR_SCALING_DEG,
-        #     )
-        #     potential_based_components = (wings_level, no_sideslip)
-
-        # if shaping is Shaping.EXTRA:
-        #     return assessors.AssessorImpl(
-        #         base_components,
-        #         potential_based_components,
-        #         positive_rewards=self.positive_rewards,
-        #     )
         # elif shaping is Shaping.EXTRA_SEQUENTIAL:
         #     altitude_error, travel_direction = base_components
         #     # make the wings_level shaping reward dependent on facing the correct direction
@@ -296,6 +309,7 @@ class TrajectoryTask(FlightTask):
         self._update_altitude_error(sim)
         self._decrement_steps_left(sim)
 
+    # TODO: 注意这里名字不对，不是分了position和altitude，而是xy和z。后面应该改过来，或者合并成一个函数
     def _update_position_error(self, sim: Simulation):
         position = prp.Vector2(sim[prp.ecef_x_ft], sim[prp.ecef_y_ft])
         target_position = prp.Vector2(sim[self.target_Xposition], sim[self.target_Yposition])
@@ -303,9 +317,9 @@ class TrajectoryTask(FlightTask):
         sim[self.position_error_mt] = error_mt
 
     def _update_altitude_error(self, sim: Simulation):
-        altitude_ft = sim[prp.altitude_sl_ft]
-        target_altitude_ft = self._get_target_altitude()
-        error_ft = altitude_ft - target_altitude_ft
+        z_position = sim[prp.ecef_z_ft]
+        target_z_ft = self._get_target_position("z")
+        error_ft = z_position - target_z_ft
         sim[self.altitude_error_ft] = error_ft
 
     def _decrement_steps_left(self, sim: Simulation):
@@ -356,11 +370,11 @@ class TrajectoryTask(FlightTask):
     def _get_target_position(self, flag: str) -> float:
         # use the same, initial heading every episode
         if flag == "x":
-            return self.TARGET_xPOSITION + self.init_ecef_position[0]
+            return self.TARGET_xPOSITION_FT + self.init_ecef_position[0]
         elif flag == "y":
-            return self.TARGET_yPOSITION + self.init_ecef_position[1]
+            return self.TARGET_yPOSITION_FT + self.init_ecef_position[1]
         elif flag == "z":
-            return self.init_ecef_position[2]
+            return self.TARGET_zPOSITION_FT + self.init_ecef_position[2]
         else:
             raise ValueError(f"Unsupported flag in get target position: {flag}")
 

@@ -77,6 +77,18 @@ class AssessorImpl(Assessor):
             cmp.calculate(state, last_state, is_terminal)
             for cmp in self.potential_components
         )
+    
+    def assess_components(self, state: State, prev_state: State, is_terminal: bool) -> Dict[str, float]:
+        """Calculates a Dict of RewardComponent names and values."""
+        # get the values of the  components
+        self._base_rewards(state, prev_state, is_terminal)
+        self._potential_based_rewards(state, prev_state, is_terminal)
+        # get the names of the  components
+        base_names = [cmp.name for cmp in self.base_components]
+        potential_names = [cmp.name for cmp in self.potential_components]
+        # combine the names and values into a dict
+        return dict(zip(base_names + potential_names, self._base_rewards(state, prev_state, is_terminal) + self._potential_based_rewards(state, prev_state, is_terminal)))
+
 
 
 class SequentialAssessor(AssessorImpl, ABC):

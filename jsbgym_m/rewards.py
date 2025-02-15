@@ -30,7 +30,8 @@ class Reward(object):
         num_reward_components = len(self.base_reward_elements) + len(
             self.shaping_reward_elements
         )
-        return sum_reward / num_reward_components
+        # return sum_reward / num_reward_components
+        return sum_reward
 
     def assessment_reward(self) -> float:
         """Returns scalar non-shaping reward by taking mean of base reward elements."""

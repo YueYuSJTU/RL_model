@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import jsbgym_m.properties as prp
 from jsbgym_m.aircraft import Aircraft
 from jsbgym_m.simulation import Simulation
-from typing import NamedTuple, Tuple, List
+from typing import NamedTuple, Tuple, List, Dict
 
 
 class AxesTuple(NamedTuple):
@@ -287,7 +287,44 @@ class FigureVisualiser(object):
         ax.set_ylabel('y-Position')
         ax.set_zlabel('Altitude')
         ax.legend()
-        plt.show(block = True)
+        plt.show(block = False)
+
+    def save_reward_components(self, reward_cmps: Dict[str, float]):
+        """
+        save reward components to self.reward_components
+        """
+        if not hasattr(self, "reward_components"):
+            self.reward_components = {}
+        for key, value in reward_cmps.items():
+            if key not in self.reward_components:
+                self.reward_components[key] = [value]
+            else:
+                self.reward_components[key].append(value)
+    
+    def plot_reward_components(self):
+        """
+        Plots the reward components recorded during the simulation.
+        """
+        if not hasattr(self, "reward_components"):
+            print("No reward components to plot.")
+            return
+
+        num_components = len(self.reward_components)
+        fig, axes = plt.subplots(num_components, 1, figsize=(10, 5 * num_components))
+        if num_components == 1:
+            axes = [axes]
+
+        for ax, (key, value) in zip(axes, self.reward_components.items()):
+            ax.plot(value, label=key)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Reward')
+            ax.legend()
+            ax.set_xlim(0, len(value) - 1)
+            ax.set_ylim(min(min(v) for v in self.reward_components.values()), 
+                        max(max(v) for v in self.reward_components.values()))
+
+        plt.tight_layout()
+        plt.show(block=True)
 
 
 class GraphVisualiser(object):
