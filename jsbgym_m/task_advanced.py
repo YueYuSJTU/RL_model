@@ -15,6 +15,7 @@ from jsbgym_m.rewards import RewardStub
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Dict, Tuple, NamedTuple, Type
 from jsbgym_m.tasks import HeadingControlTask, Shaping, FlightTask
+from jsbgym_m.coordinate import GPS_utils
 
 class SmoothHeadingTask(HeadingControlTask):
     """
@@ -149,6 +150,12 @@ class TrajectoryTask(FlightTask):
         -10000,
         10000,
     )
+    target_Altitude = BoundedProperty(
+        "target/altitude-ft",
+        "desired altitude [ft]",
+        prp.altitude_sl_ft.min,
+        prp.altitude_sl_ft.max,
+    )
     position_error_mt = BoundedProperty(
         "error/position-error-mt",
         "error to desired track [m]",
@@ -186,8 +193,8 @@ class TrajectoryTask(FlightTask):
         self.extra_state_variables = (
             self.altitude_error_ft,
             self.position_error_mt,
-            prp.sideslip_deg,
-            prp.v_down_fps,
+            # prp.sideslip_deg,
+            # prp.v_down_fps,
         )
         self.state_variables = (
             FlightTask.base_state_variables + self.action_variables
@@ -195,6 +202,7 @@ class TrajectoryTask(FlightTask):
         )
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
+        self.coordinate_transform = GPS_utils()
         super().__init__(assessor)
 
     def make_assessor(self, shaping: Shaping) -> assessors.AssessorImpl:
