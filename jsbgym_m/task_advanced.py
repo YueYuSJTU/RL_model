@@ -122,9 +122,9 @@ class TrajectoryTask(FlightTask):
     control the trajectory of an aircraft.
     """
 
-    TARGET_xPOSITION_FT = 2000
+    TARGET_xPOSITION_FT = -5000
     TARGET_yPOSITION_FT = -8000
-    TARGET_zPOSITION_FT = 0
+    TARGET_zPOSITION_FT = 200
     THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
     INITIAL_HEADING_DEG = 270
@@ -138,6 +138,24 @@ class TrajectoryTask(FlightTask):
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_ALTITUDE_DEVIATION_FT = 1000  # terminate if altitude error exceeds this
     NAVIGATION_TOLERANCE = 50       # terminate if relative error is less than this
+    enu_Xposition_ft = BoundedProperty(
+        "position/positionX-ft",
+        "current track [ft]",
+        -10000,
+        10000,
+    )
+    enu_Yposition_ft = BoundedProperty(
+        "position/positionY-ft",
+        "current track [ft]",
+        -10000,
+        10000,
+    )
+    enu_Zposition_ft = BoundedProperty(
+        "position/positionZ-ft",
+        "current altitude [ft]",
+        -10000,
+        10000,
+    )
     target_Xposition = BoundedProperty(
         "target/positionX-ft",
         "desired track [ft]",
@@ -156,9 +174,9 @@ class TrajectoryTask(FlightTask):
         prp.altitude_sl_ft.min,
         prp.altitude_sl_ft.max,
     )
-    position_error_mt = BoundedProperty(
-        "error/position-error-mt",
-        "error to desired track [m]",
+    position_error_ft = BoundedProperty(
+        "error/position-error-ft",
+        "error to desired track [ft]",
         0,
         20000,
     )
@@ -192,7 +210,7 @@ class TrajectoryTask(FlightTask):
         self.aircraft = aircraft
         self.extra_state_variables = (
             self.altitude_error_ft,
-            self.position_error_mt,
+            self.position_error_ft,
             # prp.sideslip_deg,
             # prp.v_down_fps,
         )
@@ -202,7 +220,7 @@ class TrajectoryTask(FlightTask):
         )
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
-        self.coordinate_transform = GPS_utils('ft')
+        self.coordinate_transform = GPS_utils(unit='ft')
         super().__init__(assessor)
 
     def make_assessor(self, shaping: Shaping) -> assessors.AssessorImpl:
@@ -222,7 +240,7 @@ class TrajectoryTask(FlightTask):
             ),
             rewards.AsymptoticErrorComponent(
                 name="position_error",
-                prop=self.position_error_mt,
+                prop=self.position_error_ft,
                 state_variables=self.state_variables,
                 target=0.0,
                 is_potential_based=False,
@@ -313,10 +331,11 @@ class TrajectoryTask(FlightTask):
         return {**self.base_initial_conditions, **extra_conditions}
 
     def _update_custom_properties(self, sim: Simulation) -> None:
+        self._update_enu_position(sim)
         self._update_position_error(sim)
         self._update_altitude_error(sim)
         self._decrement_steps_left(sim)
-        self._coordinate_debug(sim)
+        # self._coordinate_debug(sim)
     
     def _coordinate_debug(self, sim: Simulation) -> None:
         x, y, z = sim[prp.ecef_x_ft], sim[prp.ecef_y_ft], sim[prp.ecef_z_ft]
@@ -340,15 +359,24 @@ class TrajectoryTask(FlightTask):
         print("ecef2geo:", ecef2geo)
         print("geo2enu:", geo2enu)
 
-    # TODO: 注意这里名字不对，不是分了position和altitude，而是xy和z。后面应该改过来，或者合并成一个函数
+    def _update_enu_position(self, sim: Simulation):
+        x, y, z = sim[prp.ecef_x_ft], sim[prp.ecef_y_ft], sim[prp.ecef_z_ft]
+        x_enu, y_enu, z_enu = self.coordinate_transform.ecef2enu(x, y, z)
+        sim[self.enu_Xposition_ft] = x_enu
+        sim[self.enu_Yposition_ft] = y_enu
+        sim[self.enu_Zposition_ft] = z_enu
+    
+    def get_enu_position(self, sim: Simulation) -> list[float, float, float]:
+        return sim[self.enu_Xposition_ft], sim[self.enu_Yposition_ft], sim[self.enu_Zposition_ft]
+
     def _update_position_error(self, sim: Simulation):
-        position = prp.Vector2(sim[prp.ecef_x_ft], sim[prp.ecef_y_ft])
+        position = prp.Vector2(sim[self.enu_Xposition_ft], sim[self.enu_Yposition_ft])
         target_position = prp.Vector2(sim[self.target_Xposition], sim[self.target_Yposition])
         error_mt = (position - target_position).Norm()
-        sim[self.position_error_mt] = error_mt
+        sim[self.position_error_ft] = error_mt
 
     def _update_altitude_error(self, sim: Simulation):
-        z_position = sim[prp.ecef_z_ft]
+        z_position = sim[self.enu_Zposition_ft]
         target_z_ft = self._get_target_position("z")
         error_ft = z_position - target_z_ft
         sim[self.altitude_error_ft] = error_ft
@@ -369,7 +397,7 @@ class TrajectoryTask(FlightTask):
         return abs(altitude_error_ft) > self.MAX_ALTITUDE_DEVIATION_FT
     
     def _arrive_at_navigation_point(self, sim: Simulation) -> bool:
-        return sim[self.position_error_mt] < self.NAVIGATION_TOLERANCE
+        return sim[self.position_error_ft] < self.NAVIGATION_TOLERANCE
 
     def _get_out_of_bounds_reward(self, sim: Simulation) -> rewards.Reward:
         """
@@ -403,11 +431,11 @@ class TrajectoryTask(FlightTask):
     def _get_target_position(self, flag: str) -> float:
         # use the same, initial heading every episode
         if flag == "x":
-            return self.TARGET_xPOSITION_FT + self.init_ecef_position[0]
+            return self.TARGET_xPOSITION_FT
         elif flag == "y":
-            return self.TARGET_yPOSITION_FT + self.init_ecef_position[1]
+            return self.TARGET_yPOSITION_FT
         elif flag == "z":
-            return self.TARGET_zPOSITION_FT + self.init_ecef_position[2]
+            return self.TARGET_zPOSITION_FT
         else:
             raise ValueError(f"Unsupported flag in get target position: {flag}")
 
@@ -421,7 +449,7 @@ class TrajectoryTask(FlightTask):
             self.altitude_error_ft,
             self.target_Xposition,
             self.target_Yposition,
-            self.position_error_mt,
+            self.position_error_ft,
             prp.roll_rad,
             prp.sideslip_deg,
             self.last_agent_reward,

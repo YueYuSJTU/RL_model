@@ -223,13 +223,7 @@ class FigureVisualiser(object):
         # update each Text object with latest value
         for prop, text in zip(self.print_props, self.value_texts):
             text.set_text(f"{sim[prop]:.4g}")
-        # save current position for plotting
-        # self.positions.append(
-        #     (sim[prp.lat_geod_deg], sim[prp.lng_geoc_deg], sim[prp.altitude_sl_ft])
-        # )
-        self.positions.append(
-            (sim[prp.ecef_x_ft], sim[prp.ecef_y_ft], sim[prp.ecef_z_ft])
-        )
+
 
     def _plot_control_states(self, sim: Simulation, all_axes: AxesTuple):
         control_surfaces = [prp.aileron_left, prp.elevator, prp.throttle, prp.rudder]
@@ -265,6 +259,12 @@ class FigureVisualiser(object):
         all_axes.axes_rudder.plot(
             [rud_cmd], [0], "bo", mfc="none", markersize=10, clip_on=False
         )
+
+    def save_position(self, x, y, z):
+        """
+        save position to self.positions
+        """
+        self.positions.append((x, y, z))
     
     def plot_position(self, target = None):
         """

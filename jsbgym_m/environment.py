@@ -100,6 +100,8 @@ class JsbSimEnv(gym.Env):
 
         # save reward components from info
         if self.render_mode == "human":
+            x, y, z = self.task.get_enu_position(self.sim)
+            self.figure_visualiser.save_position(x, y, z)
             self.figure_visualiser.save_reward_components(info["reward"])
 
         # plot trajectory
