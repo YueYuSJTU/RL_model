@@ -16,6 +16,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+用在此项目中，这个转换至少能保证1e-3m的精度
 '''
 
 import numpy as np
@@ -48,15 +50,20 @@ class GPS_utils:
 		self.zZero = None
 		self.R = np.asmatrix(np.eye(3))
 		
+		self.unit = unit
+		if unit not in ["m", "ft"]:
+			raise ValueError("unit must be 'm' or 'ft'")
+		self.unit_conversion = 1.0 if unit == "m" else 0.3048  # 1 ft = 0.3048 m
 
 	def setENUorigin(self, lat, lon, height):
 		# Save origin lat, lon, height
 		self.latZero = lat
 		self.lonZero = lon
-		self.hgtZero = height
+		self.hgtZero = height * self.unit_conversion
 		
 		# Get origin ECEF X,Y,Z
-		origin = self.geo2ecef(self.latZero, self.lonZero, self.hgtZero)		
+		origin = self.geo2ecef(self.latZero, self.lonZero, height, fix=True)
+		# origin must be in meters
 		self.xZero = origin.item(0)
 		self.yZero = origin.item(1)
 		self.zZero = origin.item(2)
@@ -81,7 +88,8 @@ class GPS_utils:
 		self.R[2, 1] =  cPhi * sLmd
 		self.R[2, 2] =  sPhi
 	
-	def geo2ecef(self, lat, lon, height):
+	def geo2ecef(self, lat, lon, height, fix = False):
+		# param: fix: if True, return the result in m
 		phi = np.deg2rad(lat)
 		lmd = np.deg2rad(lon)
 		
@@ -92,16 +100,22 @@ class GPS_utils:
 		
 		N = self.a / np.sqrt(1.0 - self.e2 * sPhi * sPhi)
 		
+		height = height * self.unit_conversion
 		x = (N + height) * cPhi * cLmd
 		y = (N + height) * cPhi * sLmd
 		z = ((self.b2 / self.a2) * N + height) * sPhi
+
+		result = np.array([[x], [y], [z]])
+		if not fix:
+			return result / self.unit_conversion
 		
-		return np.array([[x], [y], [z]])
+		return result
 	
 	def ecef2enu(self, x, y, z):
+		x, y, z = x * self.unit_conversion, y * self.unit_conversion, z * self.unit_conversion
 		ecef = np.array([[x], [y], [z]])
 		
-		return np.asarray(self.R * (ecef - self.oZero))
+		return np.asarray(self.R * (ecef - self.oZero)) / self.unit_conversion
 	
 	def geo2enu(self, lat, lon, height):
 		ecef = self.geo2ecef(lat, lon, height)
@@ -109,6 +123,7 @@ class GPS_utils:
 		return self.ecef2enu(ecef.item(0), ecef.item(1), ecef.item(2))
 	
 	def ecef2geo(self, x, y, z):
+		x, y, z = x * self.unit_conversion, y * self.unit_conversion, z * self.unit_conversion
 		p = np.sqrt(x*x + y*y)
 		q = np.arctan2(self.a * z, self.b * p)
 		
@@ -124,11 +139,12 @@ class GPS_utils:
 
 		lat = np.rad2deg(phi)
 		lon = np.rad2deg(lmd)		
-		h = (p / np.cos(phi)) - v
+		h = ((p / np.cos(phi)) - v) / self.unit_conversion
 		
-		return np.array([[lat], [lon], [h]])
+		return np.array([[lat], [lon], [h]]) 
 		
 	def enu2ecef(self, x, y, z):
+		x, y, z = x * self.unit_conversion, y * self.unit_conversion, z * self.unit_conversion
 		lmd = np.deg2rad(self.latZero)
 		phi = np.deg2rad(self.lonZero)
 		
@@ -147,7 +163,7 @@ class GPS_utils:
 		yd =  cPhi * x - sPhi * sLmd * y + cLmd * sPhi * z
 		zd =  cLmd * y + sLmd * z
 		
-		return np.array([[x0+xd], [y0+yd], [z0+zd]])
+		return np.array([[x0+xd], [y0+yd], [z0+zd]]) / self.unit_conversion
 	
 	def enu2geo(self, x, y, z):
 		ecef = self.enu2ecef(x, y, z)

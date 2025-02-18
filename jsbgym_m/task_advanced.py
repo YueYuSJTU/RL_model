@@ -202,7 +202,7 @@ class TrajectoryTask(FlightTask):
         )
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
-        self.coordinate_transform = GPS_utils()
+        self.coordinate_transform = GPS_utils('ft')
         super().__init__(assessor)
 
     def make_assessor(self, shaping: Shaping) -> assessors.AssessorImpl:
@@ -316,6 +316,29 @@ class TrajectoryTask(FlightTask):
         self._update_position_error(sim)
         self._update_altitude_error(sim)
         self._decrement_steps_left(sim)
+        self._coordinate_debug(sim)
+    
+    def _coordinate_debug(self, sim: Simulation) -> None:
+        x, y, z = sim[prp.ecef_x_ft], sim[prp.ecef_y_ft], sim[prp.ecef_z_ft]
+        alt_geod = sim[prp.altitude_geod_ft]
+        lat, lon, alt = sim[prp.lat_geod_deg], sim[prp.lng_geoc_deg], sim[prp.altitude_sl_ft]
+        x_enu, y_enu = sim[prp.dist_travel_lon_m]/0.3048, sim[prp.dist_travel_lat_m]/0.3048
+
+        geo2ecef = self.coordinate_transform.geo2ecef(lat, lon, alt_geod)
+        ecef2enu = self.coordinate_transform.ecef2enu(x, y, z)
+        ecef2geo = self.coordinate_transform.ecef2geo(x, y, z)
+        geo2enu = self.coordinate_transform.geo2enu(lat, lon, alt_geod)
+
+        print("====================DEBUG:COORDINATE====================")
+        print("x, y, z:", x, y, z)
+        print("alt_geod:", alt_geod)
+        print("lat, lon, alt:", lat, lon, alt)
+        print("x_enu, y_enu:", x_enu, y_enu)
+
+        print("geo2ecef:", geo2ecef)
+        print("ecef2enu:", ecef2enu)
+        print("ecef2geo:", ecef2geo)
+        print("geo2enu:", geo2enu)
 
     # TODO: 注意这里名字不对，不是分了position和altitude，而是xy和z。后面应该改过来，或者合并成一个函数
     def _update_position_error(self, sim: Simulation):
@@ -372,6 +395,8 @@ class TrajectoryTask(FlightTask):
         self.init_ecef_position = [sim[prp.ecef_x_ft], 
                                    sim[prp.ecef_y_ft], 
                                    sim[prp.ecef_z_ft]]
+        lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
+        self.coordinate_transform.setENUorigin(*lla_position)
         sim[self.target_Xposition] = self._get_target_position("x")
         sim[self.target_Yposition] = self._get_target_position("y")
 

@@ -36,9 +36,9 @@ shape = "Shaping.STANDARD"
 # shape = "Shaping.EXTRA"
 
 # render_mode = "flightgear"
-# render_mode = None
+render_mode = None
 # render_mode = "graph"
-render_mode = "human"
+# render_mode = "human"
 
 # ======================================================================================================================
 

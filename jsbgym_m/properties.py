@@ -28,6 +28,9 @@ sideslip_deg = BoundedProperty("aero/beta-deg", "sideslip [deg]", -180, +180)
 lat_geod_deg = BoundedProperty(
     "position/lat-geod-deg", "geocentric latitude [deg]", -90, 90
 )
+altitude_geod_ft = BoundedProperty(
+    "position/geod-alt-ft", "altitude above ground level [ft]", 0, 85000
+)
 lng_geoc_deg = BoundedProperty(
     "position/long-gc-deg", "geodesic longitude [deg]", -180, 180
 )
