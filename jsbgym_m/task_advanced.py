@@ -230,38 +230,65 @@ class TrajectoryTask(FlightTask):
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         base_components = (
-            rewards.AsymptoticErrorComponent(
+            # rewards.AsymptoticErrorComponent(
+            #     name="altitude_error",
+            #     prop=self.altitude_error_ft,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=False,
+            #     scaling_factor=self.ALTITUDE_SCALING_FT,
+            # ),
+            # rewards.AsymptoticErrorComponent(
+            #     name="position_error",
+            #     prop=self.position_error_ft,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=False,
+            #     scaling_factor=self.POSITION_SCALING_MT,
+            # ),
+            # # rewards.AsymptoticErrorComponent(
+            # #     name="action_penalty",
+            # #     prop=prp.elevator_cmd,
+            # #     state_variables=self.state_variables,
+            # #     target=0.0,
+            # #     is_potential_based=False,
+            # #     scaling_factor=self.ACTION_PENALTY_SCALING,
+            # # ),
+            # # rewards.AsymptoticErrorComponent(
+            # #     name="vertival_speed",
+            # #     prop=prp.v_down_fps,
+            # #     state_variables=self.state_variables,
+            # #     target=0.0,
+            # #     is_potential_based=False,
+            # #     scaling_factor=self.VERTICAL_SPEED_SCALING_FPS,
+            # # ),
+            rewards.ScaledAsymptoticErrorComponent(
                 name="altitude_error",
                 prop=self.altitude_error_ft,
                 state_variables=self.state_variables,
                 target=0.0,
                 is_potential_based=False,
                 scaling_factor=self.ALTITUDE_SCALING_FT,
+                cmp_scale=0.2,
             ),
-            rewards.AsymptoticErrorComponent(
+            rewards.ScaledAsymptoticErrorComponent(
                 name="position_error",
                 prop=self.position_error_ft,
                 state_variables=self.state_variables,
                 target=0.0,
                 is_potential_based=False,
                 scaling_factor=self.POSITION_SCALING_MT,
+                cmp_scale=0.6,
             ),
-            # rewards.AsymptoticErrorComponent(
-            #     name="action_penalty",
-            #     prop=prp.elevator_cmd,
-            #     state_variables=self.state_variables,
-            #     target=0.0,
-            #     is_potential_based=False,
-            #     scaling_factor=self.ACTION_PENALTY_SCALING,
-            # ),
-            # rewards.AsymptoticErrorComponent(
-            #     name="vertival_speed",
-            #     prop=prp.v_down_fps,
-            #     state_variables=self.state_variables,
-            #     target=0.0,
-            #     is_potential_based=False,
-            #     scaling_factor=self.VERTICAL_SPEED_SCALING_FPS,
-            # ),
+            rewards.ScaledAsymptoticErrorComponent(
+                name="action_penalty",
+                prop=prp.elevator_cmd,
+                state_variables=self.state_variables,
+                target=0.0,
+                is_potential_based=False,
+                scaling_factor=self.ACTION_PENALTY_SCALING,
+                cmp_scale=0.2,
+            ),
         )
         return base_components
     

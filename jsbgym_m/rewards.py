@@ -203,6 +203,7 @@ class AsymptoticErrorComponent(ErrorComponent):
 
         :param scaling_factor: the property value is scaled down by this amount.
             Shaping potential is at 0.5 when the error equals this factor.
+            The effect is to specify the approximate range of this error term
         """
         super().__init__(name, prop, state_variables, target, is_potential_based)
         self.scaling_factor = scaling_factor
@@ -210,6 +211,34 @@ class AsymptoticErrorComponent(ErrorComponent):
     def _normalise_error(self, absolute_error: float):
         return normalise_error_asymptotic(absolute_error, self.scaling_factor)
 
+class ScaledAsymptoticErrorComponent(AsymptoticErrorComponent):
+    """
+    change the relative scaling of the error component.
+    Make sure the sum of the scaling factors is 1.0!
+    """
+
+    def __init__(
+        self,
+        name: str,
+        prop: prp.BoundedProperty,
+        state_variables: Tuple[prp.BoundedProperty],
+        target: Union[int, float, prp.Property, prp.BoundedProperty],
+        is_potential_based: bool,
+        scaling_factor: Tuple[float],
+        cmp_scale: float = 1.0,
+    ):
+        """
+        Constructor.
+
+        :param scaling_factors: the property value is scaled down by this amount.
+            Shaping potential is at 0.5 when the error equals this factor.
+            The effect is to specify the approximate range of this error term
+        """
+        super().__init__(name, prop, state_variables, target, is_potential_based, scaling_factor)
+        self.cmp_scale = cmp_scale
+
+    def get_potential(self, state, is_terminal):
+        return super().get_potential(state, is_terminal) * self.cmp_scale
 
 class AngularAsymptoticErrorComponent(AsymptoticErrorComponent):
     """
