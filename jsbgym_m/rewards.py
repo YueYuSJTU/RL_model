@@ -58,6 +58,60 @@ class RewardComponent(ABC):
     @abstractmethod
     def is_potential_difference_based(self) -> bool: ...
 
+class SmoothingComponent(RewardComponent):
+    """
+    A reward component which gives a reward from [0, 1]
+    if all of its properties changes smoothly between states, it will give a reward of 1
+    otherwise the reward will decrease.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        props: Tuple[prp.BoundedProperty],
+        state_variables: Tuple[prp.BoundedProperty],
+        is_potential_based: bool,
+        scaling_factor: Union[float, int] = 1.0,
+        cmp_scale: float = 1.0,
+    ):
+        """
+        Constructor.
+        
+        :param name: the uniquely identifying name of this component
+        :param props: the BoundedProperty for which a value will be smoothed from the State
+            All the props should be in the same range, whose max value is scaling_factor
+        :param scaling_factor: the largest value that props can reach
+        :param cmp_scale: the scaling factor of the reward
+        """
+        assert is_potential_based, "potential_difference_based must be True"
+        self.name = name
+        self.is_potential_based = True
+        self.state_index_of_values = [state_variables.index(prop) for prop in props]
+        self.scaling_factor = scaling_factor
+        self.cmp_scale = cmp_scale
+    
+    def get_name(self) -> str:
+        return self.name
+
+    def is_potential_difference_based(self) -> bool:
+        return self.is_potential_based
+    
+    def get_potential(self, state, is_terminal) -> list[float]:
+        # value = state[self.state_index_of_values]
+        value = [state[i]/self.scaling_factor for i in self.state_index_of_values]
+        return value
+    
+    def calculate(self, state: State, prev_state: State, is_terminal: bool):
+        """
+
+        """
+        now_value = self.get_potential(state, is_terminal)
+        prev_value = self.get_potential(prev_state, False)
+        reward = [abs(now_value[i] - prev_value[i]) for i in range(len(now_value))]
+        reward = sum(reward) / len(reward)
+        # reward = normalise_error_asymptotic(reward, scaling_factor=0.1)
+        reward = 1 - normalise_error_linear(reward, max_error=2)
+        return reward * self.cmp_scale
 
 class NormalisedComponent(RewardComponent, ABC):
     """

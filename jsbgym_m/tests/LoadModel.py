@@ -32,8 +32,8 @@ plane = "C172"
 # task = "TurnHeadingControlTask"
 task = "TrajectoryTask"
 
-shape = "Shaping.STANDARD"
-# shape = "Shaping.EXTRA"
+# shape = "Shaping.STANDARD"
+shape = "Shaping.EXTRA"
 
 # render_mode = "flightgear"
 render_mode = None

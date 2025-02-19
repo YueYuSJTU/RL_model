@@ -122,8 +122,8 @@ class TrajectoryTask(FlightTask):
     control the trajectory of an aircraft.
     """
 
-    TARGET_xPOSITION_FT = -5000
-    TARGET_yPOSITION_FT = -8000
+    TARGET_xPOSITION_FT = -2000
+    TARGET_yPOSITION_FT = -7000
     TARGET_zPOSITION_FT = 200
     THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
@@ -131,13 +131,13 @@ class TrajectoryTask(FlightTask):
     DEFAULT_EPISODE_TIME_S = 60.0
     ALTITUDE_SCALING_FT = 100
     POSITION_SCALING_MT = 5000
-    ACTION_PENALTY_SCALING = 0.15
+    ACTION_PENALTY_SCALING = 0.1
     ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
     SIDESLIP_ERROR_SCALING_DEG = 3.0
     VERTICAL_SPEED_SCALING_FPS = 1
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_ALTITUDE_DEVIATION_FT = 1000  # terminate if altitude error exceeds this
-    NAVIGATION_TOLERANCE = 50       # terminate if relative error is less than this
+    NAVIGATION_TOLERANCE = 50000       # terminate if relative error is less than this
     enu_Xposition_ft = BoundedProperty(
         "position/positionX-ft",
         "current track [ft]",
@@ -280,15 +280,15 @@ class TrajectoryTask(FlightTask):
                 scaling_factor=self.POSITION_SCALING_MT,
                 cmp_scale=0.6,
             ),
-            rewards.ScaledAsymptoticErrorComponent(
-                name="action_penalty",
-                prop=prp.elevator_cmd,
-                state_variables=self.state_variables,
-                target=0.0,
-                is_potential_based=False,
-                scaling_factor=self.ACTION_PENALTY_SCALING,
-                cmp_scale=0.2,
-            ),
+            # rewards.ScaledAsymptoticErrorComponent(
+            #     name="action_penalty",
+            #     prop=prp.elevator_cmd,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=False,
+            #     scaling_factor=self.ACTION_PENALTY_SCALING,
+            #     cmp_scale=0.2,
+            # ),
         )
         return base_components
     
@@ -307,23 +307,31 @@ class TrajectoryTask(FlightTask):
         # else:
         #     raise ValueError(f"Unsupported shaping type: {shaping}")
         else:
-            wings_level = rewards.AsymptoticErrorComponent(
-                name="wings_level",
-                prop=prp.roll_rad,
+            # wings_level = rewards.AsymptoticErrorComponent(
+            #     name="wings_level",
+            #     prop=prp.roll_rad,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=True,
+            #     scaling_factor=self.ROLL_ERROR_SCALING_RAD,
+            # )
+            # no_sideslip = rewards.AsymptoticErrorComponent(
+            #     name="no_sideslip",
+            #     prop=prp.sideslip_deg,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=True,
+            #     scaling_factor=self.SIDESLIP_ERROR_SCALING_DEG,
+            # )
+            action_penalty = rewards.SmoothingComponent(
+                name="action_penalty",
+                props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
                 state_variables=self.state_variables,
-                target=0.0,
                 is_potential_based=True,
-                scaling_factor=self.ROLL_ERROR_SCALING_RAD,
+                cmp_scale=0.2,
             )
-            no_sideslip = rewards.AsymptoticErrorComponent(
-                name="no_sideslip",
-                prop=prp.sideslip_deg,
-                state_variables=self.state_variables,
-                target=0.0,
-                is_potential_based=True,
-                scaling_factor=self.SIDESLIP_ERROR_SCALING_DEG,
-            )
-            potential_based_components = (wings_level, no_sideslip)
+            # potential_based_components = (wings_level, no_sideslip)
+            potential_based_components = (action_penalty,)
 
         if shaping is Shaping.EXTRA:
             return assessors.AssessorImpl(
@@ -433,6 +441,10 @@ class TrajectoryTask(FlightTask):
         """
         reward_scalar = (1 + sim[self.steps_left]) * -1.0
         return RewardStub(reward_scalar, reward_scalar)
+    
+    def _arrive_at_navigation_point_reward(self, sim: Simulation) -> rewards.Reward:
+        bonus = 1 + sim[self.steps_left]
+        return RewardStub(bonus, bonus)
 
     def _reward_terminal_override(
         self, reward: rewards.Reward, sim: Simulation
@@ -441,7 +453,10 @@ class TrajectoryTask(FlightTask):
             # if using negative rewards, need to give a big negative reward on terminal
             return self._get_out_of_bounds_reward(sim)
         else:
-            return reward
+            if self._arrive_at_navigation_point(sim):
+                return self._arrive_at_navigation_point_reward(sim)
+            else:
+                return reward
     
     def _new_episode_init(self, sim: Simulation) -> None:
         super()._new_episode_init(sim)
