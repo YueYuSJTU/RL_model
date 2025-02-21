@@ -106,6 +106,7 @@ class JsbSimEnv(gym.Env):
 
         # plot trajectory
         if self.render_mode == "human" and terminated:
+            self.render()
             if hasattr(self.task, "target_Xposition"):
                 target = [self.task._get_target_position("x"), 
                           self.task._get_target_position("y"),
