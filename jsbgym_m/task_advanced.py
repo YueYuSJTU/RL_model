@@ -128,7 +128,7 @@ class TrajectoryTask(FlightTask):
     THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
     INITIAL_HEADING_DEG = 270
-    DEFAULT_EPISODE_TIME_S = 60.0
+    DEFAULT_EPISODE_TIME_S = 90.0
     ALTITUDE_SCALING_FT = 100
     POSITION_SCALING_MT = 5000
     ACTION_PENALTY_SCALING = 0.1
@@ -137,7 +137,7 @@ class TrajectoryTask(FlightTask):
     VERTICAL_SPEED_SCALING_FPS = 1
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_ALTITUDE_DEVIATION_FT = 1000  # terminate if altitude error exceeds this
-    NAVIGATION_TOLERANCE = 1000       # terminate if relative error is less than this
+    NAVIGATION_TOLERANCE = 500       # terminate if relative error is less than this
     enu_Xposition_ft = BoundedProperty(
         "position/positionX-ft",
         "current track [ft]",
@@ -193,7 +193,7 @@ class TrajectoryTask(FlightTask):
         shaping_type: Shaping,
         step_frequency_hz: float,
         aircraft: Aircraft,
-        episode_time_s: float = HeadingControlTask.DEFAULT_EPISODE_TIME_S,
+        episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
     ):
         """
@@ -445,7 +445,7 @@ class TrajectoryTask(FlightTask):
         return RewardStub(reward_scalar, reward_scalar)
     
     def _arrive_at_navigation_point_reward(self, sim: Simulation) -> rewards.Reward:
-        bonus = 1 + sim[self.steps_left] + 50
+        bonus = 1 + sim[self.steps_left] + 20
         return RewardStub(bonus, bonus)
 
     def _reward_terminal_override(
