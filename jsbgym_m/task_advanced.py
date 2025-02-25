@@ -130,13 +130,14 @@ class TrajectoryTask(FlightTask):
     INITIAL_HEADING_DEG = 270
     DEFAULT_EPISODE_TIME_S = 90.0
     ALTITUDE_SCALING_FT = 100
-    POSITION_SCALING_MT = 5000
+    X_POSITION_SCALING_MT = 5000
+    Y_POSITION_SCALING_MT = 5000
     ACTION_PENALTY_SCALING = 0.1
     ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
     SIDESLIP_ERROR_SCALING_DEG = 3.0
     VERTICAL_SPEED_SCALING_FPS = 1
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
-    MAX_ALTITUDE_DEVIATION_FT = 1000  # terminate if altitude error exceeds this
+    MAX_ALTITUDE_DEVIATION_FT = 3000  # terminate if altitude error exceeds this
     NAVIGATION_TOLERANCE = 500       # terminate if relative error is less than this
     enu_Xposition_ft = BoundedProperty(
         "position/positionX-ft",
@@ -174,10 +175,23 @@ class TrajectoryTask(FlightTask):
         prp.altitude_sl_ft.min,
         prp.altitude_sl_ft.max,
     )
-    position_error_ft = BoundedProperty(
-        "error/position-error-ft",
-        "error to desired track [ft]",
-        0,
+    # position_error_ft = BoundedProperty(
+    #     "error/position-error-ft",
+    #     "error to desired track [ft]",
+    #     0,
+    #     20000,
+    # )
+
+    x_error_ft = BoundedProperty(
+        "error/x-error-ft",
+        "error to desired x-position [ft]",
+        -20000,
+        20000,
+    )
+    y_error_ft = BoundedProperty(
+        "error/y-error-ft",
+        "error to desired y-position [ft]",
+        -20000,
         20000,
     )
     altitude_error_ft = BoundedProperty(
@@ -210,7 +224,8 @@ class TrajectoryTask(FlightTask):
         self.aircraft = aircraft
         self.extra_state_variables = (
             self.altitude_error_ft,
-            self.position_error_ft,
+            self.x_error_ft,
+            self.y_error_ft,
             # prp.sideslip_deg,
             # prp.v_down_fps,
         )
@@ -221,6 +236,7 @@ class TrajectoryTask(FlightTask):
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_utils(unit='ft')
+        self.target_theta = 0
         super().__init__(assessor)
 
     def make_assessor(self, shaping: Shaping) -> assessors.AssessorImpl:
@@ -269,20 +285,29 @@ class TrajectoryTask(FlightTask):
                 target=0.0,
                 is_potential_based=False,
                 scaling_factor=self.ALTITUDE_SCALING_FT,
-                cmp_scale=0.2,
+                cmp_scale=0.3,
             ),
             rewards.ScaledAsymptoticErrorComponent(
-                name="position_error",
-                prop=self.position_error_ft,
+                name="x_position_error",
+                prop=self.x_error_ft,
                 state_variables=self.state_variables,
                 target=0.0,
                 is_potential_based=False,
-                scaling_factor=self.POSITION_SCALING_MT,
-                cmp_scale=0.6,
+                scaling_factor=self.X_POSITION_SCALING_MT,
+                cmp_scale=0.2,
+            ),
+            rewards.ScaledAsymptoticErrorComponent(
+                name="y_position_error",
+                prop=self.y_error_ft,
+                state_variables=self.state_variables,
+                target=0.0,
+                is_potential_based=False,
+                scaling_factor=self.Y_POSITION_SCALING_MT,
+                cmp_scale=0.2,
             ),
             # rewards.ScaledAsymptoticErrorComponent(
-            #     name="action_penalty",
-            #     prop=prp.elevator_cmd,
+            #     name="p_reward",
+            #     prop=prp.p_radps,
             #     state_variables=self.state_variables,
             #     target=0.0,
             #     is_potential_based=False,
@@ -328,7 +353,7 @@ class TrajectoryTask(FlightTask):
                 props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
                 state_variables=self.state_variables,
                 is_potential_based=True,
-                cmp_scale=0.2,
+                cmp_scale=0.3,
             )
             # potential_based_components = (wings_level, no_sideslip)
             potential_based_components = (action_penalty,)
@@ -407,8 +432,8 @@ class TrajectoryTask(FlightTask):
     def _update_position_error(self, sim: Simulation):
         position = prp.Vector2(sim[self.enu_Xposition_ft], sim[self.enu_Yposition_ft])
         target_position = prp.Vector2(sim[self.target_Xposition], sim[self.target_Yposition])
-        error_mt = (position - target_position).Norm()
-        sim[self.position_error_ft] = error_mt
+        sim[self.x_error_ft] = position.get_x() - target_position.get_x()
+        sim[self.y_error_ft] = position.get_y() - target_position.get_y()
 
     def _update_altitude_error(self, sim: Simulation):
         z_position = sim[self.enu_Zposition_ft]
@@ -422,19 +447,23 @@ class TrajectoryTask(FlightTask):
     def _is_terminal(self, sim: Simulation) -> bool:
         # terminate when time >= max, but use math.isclose() for float equality test
         terminal_step = sim[self.steps_left] <= 0
-        state_quality = sim[self.last_assessment_reward]
         # TODO: issues if sequential?
-        state_out_of_bounds = state_quality < self.MIN_STATE_QUALITY
-        if not self.positive_rewards:
-            state_out_of_bounds = False
-        return terminal_step or state_out_of_bounds or self._altitude_out_of_bounds(sim) or self._arrive_at_navigation_point(sim)
+        return terminal_step or self._state_out_of_bounds(sim) or self._arrive_at_navigation_point(sim)
 
     def _altitude_out_of_bounds(self, sim: Simulation) -> bool:
         altitude_error_ft = sim[self.altitude_error_ft]
         return abs(altitude_error_ft) > self.MAX_ALTITUDE_DEVIATION_FT
     
+    def _state_out_of_bounds(self, sim: Simulation) -> bool:
+        state_out_of_bounds = sim[self.last_agent_reward] < self.MIN_STATE_QUALITY
+        if not self.positive_rewards:
+            state_out_of_bounds = False
+        return state_out_of_bounds or self._altitude_out_of_bounds(sim)
+    
     def _arrive_at_navigation_point(self, sim: Simulation) -> bool:
-        return sim[self.position_error_ft] < self.NAVIGATION_TOLERANCE
+        x_arrive = abs(sim[self.x_error_ft]) < self.NAVIGATION_TOLERANCE
+        y_arrive = abs(sim[self.y_error_ft]) < self.NAVIGATION_TOLERANCE
+        return x_arrive and y_arrive
 
     def _get_out_of_bounds_reward(self, sim: Simulation) -> rewards.Reward:
         """
@@ -445,13 +474,13 @@ class TrajectoryTask(FlightTask):
         return RewardStub(reward_scalar, reward_scalar)
     
     def _arrive_at_navigation_point_reward(self, sim: Simulation) -> rewards.Reward:
-        bonus = 1 + sim[self.steps_left] + 20
+        bonus = 1 + sim[self.steps_left]
         return RewardStub(bonus, bonus)
 
     def _reward_terminal_override(
         self, reward: rewards.Reward, sim: Simulation
     ) -> rewards.Reward:
-        if self._altitude_out_of_bounds(sim) and not self.positive_rewards:
+        if self._state_out_of_bounds(sim) and not self.positive_rewards:
             # if using negative rewards, need to give a big negative reward on terminal
             return self._get_out_of_bounds_reward(sim)
         else:
@@ -469,8 +498,27 @@ class TrajectoryTask(FlightTask):
                                    sim[prp.ecef_z_ft]]
         lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
         self.coordinate_transform.setENUorigin(*lla_position)
+        # self._random_target_position()
+        # self._circle_target_position()
+        self._line_target_position()
         sim[self.target_Xposition] = self._get_target_position("x")
         sim[self.target_Yposition] = self._get_target_position("y")
+
+    def _random_target_position(self) -> None:
+        self.TARGET_xPOSITION_FT = np.random.uniform(-10000, -9000) if random.random() < 0.5 else np.random.uniform(9000, 10000)
+        self.TARGET_yPOSITION_FT = np.random.uniform(-10000, -9000) if random.random() < 0.5 else np.random.uniform(9000, 10000)
+        self.TARGET_zPOSITION_FT = np.random.uniform(-1000, 1000)
+
+    def _circle_target_position(self) -> None:
+        self.target_theta += 0.01
+        self.TARGET_xPOSITION_FT = 5000 * math.cos(self.target_theta)
+        self.TARGET_yPOSITION_FT = 5000 * math.sin(self.target_theta)
+        self.TARGET_zPOSITION_FT = 200
+
+    def _line_target_position(self) -> None:
+        self.TARGET_xPOSITION_FT = np.random.uniform(-5000, 5000)
+        self.TARGET_yPOSITION_FT = 9000
+        self.TARGET_zPOSITION_FT = 200
 
     def _get_target_position(self, flag: str) -> float:
         # use the same, initial heading every episode
@@ -490,12 +538,13 @@ class TrajectoryTask(FlightTask):
         return (
             prp.u_fps,
             prp.altitude_sl_ft,
-            self.altitude_error_ft,
             self.target_Xposition,
             self.target_Yposition,
-            self.position_error_ft,
-            prp.roll_rad,
-            prp.sideslip_deg,
+            self.x_error_ft,
+            self.y_error_ft,
+            self.altitude_error_ft,
+            # prp.roll_rad,
+            # prp.sideslip_deg,
             self.last_agent_reward,
             self.last_assessment_reward,
             self.steps_left,

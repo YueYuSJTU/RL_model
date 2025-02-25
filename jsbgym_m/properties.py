@@ -176,6 +176,12 @@ class Vector2(object):
     def Norm(self):
         return math.sqrt(self.x**2 + self.y**2)
     
+    def get_x(self):
+        return self.x
+    
+    def get_y(self):
+        return self.y
+    
     def __sub__(self, other: "Vector2") -> "Vector2":
         return Vector2(self.x - other.x, self.y - other.y)
 

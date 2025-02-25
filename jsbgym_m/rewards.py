@@ -108,7 +108,8 @@ class SmoothingComponent(RewardComponent):
         now_value = self.get_potential(state, is_terminal)
         prev_value = self.get_potential(prev_state, False)
         reward = [abs(now_value[i] - prev_value[i]) for i in range(len(now_value))]
-        reward = sum(reward) / len(reward)
+        # reward = sum(reward) / len(reward)
+        reward = max(reward)
         # reward = normalise_error_asymptotic(reward, scaling_factor=0.1)
         reward = 1 - normalise_error_linear(reward, max_error=2)
         return reward * self.cmp_scale
