@@ -6,12 +6,12 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 import numpy as np
 import sys
-sys.path.insert(0, "D:\yy_workspace\Reinforcement_learning\jsbgym")
+sys.path.insert(0, "D:\Work_File\RL\jsbgym")
 import jsbgym_m             # type: ignore
 
 # 模型存储位置
 log_path="./logs/"
-log_path = log_path + "num102/"
+# log_path = log_path + "num102/"
 # 读取模型选择
 model_name = "best_model"
 # model_name = "best_model_1805.4166278576747"

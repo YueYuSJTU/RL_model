@@ -8,7 +8,7 @@ from stable_baselines3.common.callbacks import ProgressBarCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.utils import set_random_seed
 import sys
-sys.path.insert(0, "D:\yy_workspace\Reinforcement_learning\jsbgym")
+sys.path.insert(0, "D:\Work_File\RL\jsbgym")
 
 import jsbgym_m             # type: ignore
 
@@ -74,7 +74,7 @@ if __name__ == "__main__":
                                 deterministic=True, render=False)
 
     model = PPO("MlpPolicy", train_env, learning_rate=1.5e-4, verbose=1, device='cpu', tensorboard_log="./logs/tensorboard/")
-    model.learn(total_timesteps=6000_000, progress_bar=True, callback=[eval_callback])
+    model.learn(total_timesteps=2000_000, progress_bar=True, callback=[eval_callback])
 
     # 保存训练结束的模型
     # model.save(log_path + "final_model")
