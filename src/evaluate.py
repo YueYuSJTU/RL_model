@@ -1,5 +1,7 @@
 import os
 import yaml
+from utils.yaml_import import add_path
+add_path()
 from typing import Dict
 from stable_baselines3 import PPO
 from environments.make_env import create_env
@@ -33,9 +35,10 @@ def evaluate(exp_path: str, render_mode: str = "human"):
 
     # 运行演示
     obs = vec_env.reset()
-    for _ in range(15000):
+    for i in range(15000):
         action, _ = model.predict(obs, deterministic=True)
         obs, _, terminated, _ = vec_env.step(action)
+        # print(f"step{i}, obs: {obs}, action: {action}")
         if terminated:
             break
 

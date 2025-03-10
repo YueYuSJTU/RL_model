@@ -1,6 +1,8 @@
 import os
 import yaml
 import shutil
+from utils.yaml_import import add_path
+add_path()
 from datetime import datetime
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback, ProgressBarCallback

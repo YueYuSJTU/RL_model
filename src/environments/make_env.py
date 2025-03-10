@@ -1,7 +1,8 @@
-from typing import Optional
+from typing import Optional, List, Tuple, Callable
 import gymnasium as gym
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
+from src.utils.yaml_import import import_class
 
 import sys
 sys.path.insert(0, "D:\Work_File\RL\jsbgym")
@@ -21,11 +22,11 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
     
     if training:
         # 创建训练环境
-        vec_env = SubprocVecEnv([make_env(env_id, i) for i in range(num_cpu)])
+        vec_env = SubprocVecEnv([make_Env(env_id, i, wrappers=env_config["wrappers"]) for i in range(num_cpu)])
     else:
         # 创建评估环境
-        vec_env = DummyVecEnv([lambda: gym.make(env_id, render_mode=render_mode)])
-    
+        vec_env = DummyVecEnv([make_Env(env_id, 0, render_mode=render_mode, wrappers=env_config["wrappers"])])
+
     # 标准化处理
     if env_config.get("use_vec_normalize", False):
         vec_env = VecNormalize(
@@ -39,7 +40,7 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
     return vec_env
 
 
-def make_env(env_id: str, rank: int, seed: int = 0, render_mode= None):
+def make_Env(env_id: str, rank: int, seed: int = 0, render_mode= None, wrappers: Optional[List[Tuple[Callable, dict]]] = None):
     """
     Utility function for multiprocessed env.
 
@@ -50,7 +51,12 @@ def make_env(env_id: str, rank: int, seed: int = 0, render_mode= None):
     """
     def _init():
         env = gym.make(env_id, render_mode=render_mode)
+        if wrappers is not None:
+            for item in wrappers:
+                wrapper = import_class(item["name"])
+                kwargs = item["kwargs"]
+                env = wrapper(env, **kwargs)
         env.reset(seed=seed + rank)
         return env
-    set_random_seed(seed)
+    # set_random_seed(seed)
     return _init
