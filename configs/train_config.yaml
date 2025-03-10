@@ -5,3 +5,4 @@ total_timesteps: 2000_000
 eval_freq: 10000
 log_root: "./experiments"
 seed: 42
+num_cpu: 4

@@ -35,7 +35,7 @@ def train():
     save_config(env_cfg, log_path, "env_config.yaml")
 
     # 创建环境
-    train_env = create_env(env_cfg, training=True)
+    train_env = create_env(env_cfg, training=True, num_cpu=train_cfg["num_cpu"])
     eval_env = create_env(env_cfg, training=False)
     eval_env.training = False
     eval_env.norm_reward = False
