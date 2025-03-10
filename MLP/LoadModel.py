@@ -11,7 +11,8 @@ import jsbgym_m             # type: ignore
 
 # 模型存储位置
 log_path="./logs/"
-# log_path = log_path + "num102/"
+log_path = log_path + "num12/"
+# log_path = "./experiments/last_train/"
 # 读取模型选择
 model_name = "best_model"
 # model_name = "best_model_1805.4166278576747"
@@ -48,7 +49,7 @@ vec_env = DummyVecEnv([lambda: gym.make(env_id, render_mode=render_mode)])
 # vec_env = DummyVecEnv([lambda: SkipObsWrapper(gym.make(env_id), skip_step=skipStep, skip_times=skipTimes)])
 # vec_env.seed(seed)
 # vec_env = VecNormalize(vec_env, norm_obs=True, norm_reward=True, clip_obs=10.)
-vec_env = VecNormalize.load(log_path + "final_train_env", vec_env)
+vec_env = VecNormalize.load(log_path + "final_train_env.pkl", vec_env)
 vec_env.training = False
 vec_env.norm_reward = False
 
@@ -68,18 +69,17 @@ model = PPO.load(log_path + model_name, env=vec_env, device='cpu')
 # vec_env = model.get_env()
 obs = vec_env.reset()
 
-position = []
-Euler = []
-rewardDepart = []
-# waypoints = []
-actions = []
+total_reward = 0
 print("Start to simulate")
 for i in range(15000):
     vec_env.render()
     action, _state = model.predict(obs, deterministic=True)
+    # print(f"Step {i}, action: {action}")
     obs, reward, terminated, _ = vec_env.step(action)
+    total_reward += reward
     if terminated:
         print(f"Terminated at step {i}")
+        print(f"Total reward: {total_reward}")
         break
 
 vec_env.close()

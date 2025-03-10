@@ -8,14 +8,17 @@ from stable_baselines3.common.utils import set_random_seed
 from environments.make_env import create_env
 from utils.logger import setup_logger
 from utils.serialization import save_config
+from agents.make_agent import creat_agent
 
 def train():
     # 加载配置
     with open("configs/train_config.yaml", encoding="utf-8") as f:
         train_cfg = yaml.safe_load(f)
-    with open("configs/agent/ppo.yaml", encoding="utf-8") as f:
+    env_path = os.path.join("configs", "env", f"{train_cfg['env']}.yaml")
+    agent_path = os.path.join("configs", "agent", f"{train_cfg['agent']}.yaml")
+    with open(agent_path, encoding="utf-8") as f:
         agent_cfg = yaml.safe_load(f)
-    with open("configs/env/c172_trajectory.yaml", encoding="utf-8") as f:
+    with open(env_path, encoding="utf-8") as f:
         env_cfg = yaml.safe_load(f)
 
     # 设置实验路径
@@ -30,9 +33,6 @@ def train():
     save_config(train_cfg, log_path, "train_config.yaml")
     save_config(agent_cfg, log_path, "agent_config.yaml")
     save_config(env_cfg, log_path, "env_config.yaml")
-
-    # 设置随机种子
-    set_random_seed(train_cfg["seed"])
 
     # 创建环境
     train_env = create_env(env_cfg, training=True)
@@ -52,10 +52,11 @@ def train():
     progress_callback = ProgressBarCallback()
 
     # 创建模型
-    model = PPO(
+    model = creat_agent(
         env=train_env,
+        agent_class=train_cfg["agent"],
         tensorboard_log=os.path.join(log_path, "tensorboard"),
-        **agent_cfg
+        agent_cfg=agent_cfg
     )
 
     # 开始训练

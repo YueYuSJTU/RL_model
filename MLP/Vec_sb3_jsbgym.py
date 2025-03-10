@@ -75,7 +75,7 @@ if __name__ == "__main__":
                                 deterministic=True, render=False)
 
     model = PPO("MlpPolicy", train_env, learning_rate=1.5e-4, verbose=1, device='cpu', tensorboard_log="./logs/tensorboard/")
-    model.learn(total_timesteps=800_000, progress_bar=True, callback=[eval_callback])
+    model.learn(total_timesteps=2000_000, progress_bar=True, callback=[eval_callback])
 
     # 保存训练结束的模型
     # model.save(log_path + "final_model")

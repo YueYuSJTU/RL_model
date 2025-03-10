@@ -56,11 +56,11 @@ def make_env(env_id: str, rank: int, seed: int = 0, render_mode= None):
 if __name__ == "__main__":
     # 创建训练环境
     train_env = DummyVecEnv([lambda: gym.make(env_id)])
-    train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True,
+    train_env = VecNormalize(train_env, norm_obs=True, norm_reward=False,
                     clip_obs=10.)
     # 创建评估环境
     eval_env = DummyVecEnv([lambda: gym.make(env_id)])
-    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=True,
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False,
                     clip_obs=10.)
     eval_env.training = False
     eval_env.norm_reward = False
@@ -74,8 +74,8 @@ if __name__ == "__main__":
                                 deterministic=True, render=False)
 
     model = PPO("MlpPolicy", train_env, learning_rate=1.5e-4, verbose=1, device='cpu', tensorboard_log="./logs/tensorboard/")
-    model.learn(total_timesteps=2000_000, progress_bar=True, callback=[eval_callback])
+    model.learn(total_timesteps=10000_000, progress_bar=True, callback=[eval_callback])
 
     # 保存训练结束的模型
     # model.save(log_path + "final_model")
-    train_env.save(log_path + "final_train_env")
+    train_env.save(log_path + "final_train_env.pkl")

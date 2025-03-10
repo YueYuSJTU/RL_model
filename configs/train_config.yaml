@@ -1,5 +1,7 @@
 # 训练通用配置
-total_timesteps: 3000_000
+agent: ppo
+env: c172_trajectory
+total_timesteps: 2000_000
 eval_freq: 10000
 log_root: "./experiments"
 seed: 42

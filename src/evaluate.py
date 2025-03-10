@@ -13,9 +13,10 @@ def evaluate(exp_path: str, render_mode: str = "human"):
     
     # 修改渲染模式
     env_cfg["render_mode"] = render_mode
+    env_cfg["use_vec_normalize"] = False
     
     # 创建评估环境
-    vec_env = create_env(env_cfg, training=False, load=True)
+    vec_env = create_env(env_cfg, training=False)
     vec_env = VecNormalize.load(
         os.path.join(exp_path, "final_train_env.pkl"), 
         vec_env

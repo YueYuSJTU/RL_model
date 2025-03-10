@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, "D:\Work_File\RL\jsbgym")
 import jsbgym_m             # type: ignore
 
-def create_env(env_config: dict, training: bool = True, load: bool = False) -> DummyVecEnv:
+def create_env(env_config: dict, training: bool = True) -> DummyVecEnv:
     """创建标准化环境"""
     # 构建环境ID
     plane = env_config["plane"]
@@ -24,10 +24,6 @@ def create_env(env_config: dict, training: bool = True, load: bool = False) -> D
     
     # 向量化环境
     vec_env = DummyVecEnv([lambda: env])
-
-    # 如果是加载模式，则避免通过VecNormalize初始化
-    if load:
-        return vec_env
     
     # 标准化处理
     if env_config.get("use_vec_normalize", False):
