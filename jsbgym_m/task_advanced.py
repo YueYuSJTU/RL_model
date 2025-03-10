@@ -125,13 +125,13 @@ class TrajectoryTask(FlightTask):
     TARGET_xPOSITION_FT = 3000
     TARGET_yPOSITION_FT = 5000
     TARGET_zPOSITION_FT = 200
-    THROTTLE_CMD = 0.6
+    THROTTLE_CMD = 0.7
     MIXTURE_CMD = 0.8
     INITIAL_HEADING_DEG = 270
     DEFAULT_EPISODE_TIME_S = 90.0
     ALTITUDE_SCALING_FT = 100
-    X_POSITION_SCALING_MT = 5000
-    Y_POSITION_SCALING_MT = 5000
+    X_POSITION_SCALING_MT = 2500
+    Y_POSITION_SCALING_MT = 4000
     ACTION_PENALTY_SCALING = 0.1
     ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
     SIDESLIP_ERROR_SCALING_DEG = 3.0
@@ -294,7 +294,7 @@ class TrajectoryTask(FlightTask):
                 target=0.0,
                 is_potential_based=False,
                 scaling_factor=self.X_POSITION_SCALING_MT,
-                cmp_scale=0.2,
+                cmp_scale=0.3,
             ),
             rewards.ScaledAsymptoticErrorComponent(
                 name="y_position_error",
@@ -303,7 +303,7 @@ class TrajectoryTask(FlightTask):
                 target=0.0,
                 is_potential_based=False,
                 scaling_factor=self.Y_POSITION_SCALING_MT,
-                cmp_scale=0.2,
+                cmp_scale=0.3,
             ),
             # rewards.ScaledAsymptoticErrorComponent(
             #     name="p_reward",
