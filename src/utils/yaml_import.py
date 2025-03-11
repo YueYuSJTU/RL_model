@@ -18,6 +18,39 @@ def import_class(class_path):
     module = __import__(module_path, fromlist=[class_name])
     return getattr(module, class_name)
 
+def str2class(config_dict, process_function, flag=":"):
+    """
+    递归处理字典，将含有":"的字符串值通过指定函数处理
+    
+    Args:
+        config_dict: 要处理的字典
+        process_function: 处理函数，接收字符串，返回处理后的值
+    
+    Returns:
+        处理后的字典
+    """
+    if not isinstance(config_dict, dict):
+        return config_dict
+    
+    result = {}
+    for key, value in config_dict.items():
+        if isinstance(value, dict):
+            # 递归处理嵌套字典
+            result[key] = str2class(value, process_function)
+        elif isinstance(value, list):
+            # 处理列表
+            result[key] = [str2class(item, process_function) 
+                          if isinstance(item, dict) else item 
+                          for item in value]
+        elif isinstance(value, str) and flag in value:
+            # 处理包含":"的字符串
+            result[key] = process_function(value)
+        else:
+            # 其他值保持不变
+            result[key] = value
+    
+    return result
+
 
 if __name__ == "__main__":
     add_path()

@@ -15,6 +15,7 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
     task = env_config["task"]
     shape = env_config["shape"]
     render_mode = env_config.get("render_mode")
+    wrappers = env_config.get("wrappers") if "wrappers" in env_config else None
     
     env_id = f"{plane}-{task}-{shape}-NoFG-v0"
     if render_mode == "flightgear":
@@ -22,10 +23,10 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
     
     if training:
         # 创建训练环境
-        vec_env = SubprocVecEnv([make_Env(env_id, i, wrappers=env_config["wrappers"]) for i in range(num_cpu)])
+        vec_env = SubprocVecEnv([make_Env(env_id, i, wrappers=wrappers) for i in range(num_cpu)])
     else:
         # 创建评估环境
-        vec_env = DummyVecEnv([make_Env(env_id, 0, render_mode=render_mode, wrappers=env_config["wrappers"])])
+        vec_env = DummyVecEnv([make_Env(env_id, 0, render_mode=render_mode, wrappers=wrappers)])
 
     # 标准化处理
     if env_config.get("use_vec_normalize", False):

@@ -1,15 +1,7 @@
 from stable_baselines3 import PPO
 from agents.gru.gru_nn import RNNEncoder
 import yaml
-
-# def custom_loader(loader, node):
-#     value = loader.construct_scalar(node)
-#     if value == "RNNEncoder":
-#         return RNNEncoder
-#     return value
-
-# yaml.add_constructor('!custom', custom_loader)
-
+from src.utils.yaml_import import import_class, str2class
 
 def creat_agent(env, agent_class: str, tensorboard_log: str, agent_cfg):
     """创建PPO代理"""
@@ -17,6 +9,9 @@ def creat_agent(env, agent_class: str, tensorboard_log: str, agent_cfg):
         model_class = PPO
     else:
         raise ValueError(f"Unknown agent class: {agent_class}")
+    
+    agent_cfg = str2class(agent_cfg, import_class)
+    # print(f"Debug: agent_cfg = {agent_cfg}")
     
     model = model_class(
         env=env,

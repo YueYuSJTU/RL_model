@@ -1,10 +1,10 @@
 # PPO-GRU 参数
 policy: "MlpPolicy"
-learning_rate: 1.5e-4
+learning_rate: 1.0e-5
 device: "cpu"
 verbose: 1
 n_steps: 2048
-batch_size: 64
+batch_size: 1024
 n_epochs: 10
 gamma: 0.99
 gae_lambda: 0.95
@@ -13,19 +13,18 @@ clip_range_vf: null
 ent_coef: 0.0
 vf_coef: 0.5
 max_grad_norm: 0.5
-use_rms_prop: false
-normalize_advantage: true
+
 policy_kwargs:
   share_features_extractor: false
-  features_extractor_class: RNNEncoder
+  features_extractor_class: "src.agents.gru.gru_nn:RNNEncoder"
   features_extractor_kwargs: 
-    features_dim: 128
-    embed_dim: 128
-    rnn_hidden_size: 128
+    features_dim: 64
+    embed_dim: 64
+    rnn_hidden_size: 64
     num_layers: 1
-    dropout: None
+    dropout: 
     encoder: "GRU"
     obs_length: 15
   net_arch: 
-    pi: [256, 256]
-    qf: [256, 256]
+    pi: [64, 64]
+    qf: [64, 64]
