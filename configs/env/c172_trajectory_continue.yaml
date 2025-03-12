@@ -12,4 +12,4 @@ wrappers:
   - name: "src.environments.ContinueWrapper:ContinueObservation"
     kwargs:
       skip_frame: 2
-      total_frame: 3
+      total_frame: 10

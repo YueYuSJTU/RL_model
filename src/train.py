@@ -25,7 +25,7 @@ def train():
 
     # 设置实验路径
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    exp_name = f"{timestamp}_ppo_{env_cfg['task']}"
+    exp_name = f"{timestamp}_{train_cfg['agent']}_{env_cfg['task']}"
     log_path = os.path.join(train_cfg["log_root"], exp_name)
     
     # 初始化日志系统

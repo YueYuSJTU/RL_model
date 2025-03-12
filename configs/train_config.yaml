@@ -1,5 +1,5 @@
 # 训练通用配置
-agent: ppo_gru
+agent: ppo
 env: c172_trajectory_continue
 total_timesteps: 3000_000
 eval_freq: 10000

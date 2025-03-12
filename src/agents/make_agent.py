@@ -1,5 +1,4 @@
 from stable_baselines3 import PPO
-from agents.gru.gru_nn import RNNEncoder
 import yaml
 from src.utils.yaml_import import import_class, str2class
 

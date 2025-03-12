@@ -1,0 +1,26 @@
+# PPO-trans 参数
+policy: "MlpPolicy"
+learning_rate: 1.0e-5
+device: "cpu"
+verbose: 1
+n_steps: 2048
+batch_size: 1024
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+clip_range_vf: null
+ent_coef: 0.0
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+policy_kwargs:
+  share_features_extractor: True
+  features_extractor_class: "src.agents.transformer.trans_nn:TransformerFeatureExtractor"
+  features_extractor_kwargs: 
+    seq_length: 10      # 根据你的环境设定
+    features_dim: 256   # 最终特征输出维度，与PPO网络后续层匹配
+    d_model: 64
+    nhead: 2
+    num_layers: 2
+    dropout: 0.2
