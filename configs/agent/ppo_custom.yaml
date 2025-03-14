@@ -1,0 +1,5 @@
+# PPO_custom 参数
+policy: "MLP.customMLP:CustomActorCriticPolicy"
+learning_rate: 1.5e-4
+device: "cpu"
+verbose: 1

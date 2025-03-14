@@ -27,8 +27,8 @@ class TransformerFeatureExtractor(BaseFeaturesExtractor):
         # 1. 嵌入层：将原始观测投影到d_model维度
         self.embedding = nn.Linear(self.obs_dim, d_model)
         
-        # 2. 位置编码：采用学习型位置编码
-        self.pos_embedding = nn.Parameter(torch.zeros(1, seq_length, d_model))
+        # 2. 位置编码：使用函数计算位置编码
+        self.pos_embedding = self._generate_positional_encoding(seq_length, d_model)
         
         # 3. Transformer Encoder层
         encoder_layer = nn.TransformerEncoderLayer(
@@ -42,6 +42,20 @@ class TransformerFeatureExtractor(BaseFeaturesExtractor):
         
         # 5. 最终投影：将d_model维度映射到features_dim，使其兼容后续MLP部分
         self.fc = nn.Linear(d_model, features_dim)
+    
+    def _generate_positional_encoding(self, seq_length, d_model):
+        """
+        生成位置编码
+        :param seq_length: 序列长度
+        :param d_model: 特征维度
+        :return: 位置编码张量，形状为 (1, seq_length, d_model)
+        """
+        position = torch.arange(0, seq_length, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
+        pos_encoding = torch.zeros((seq_length, d_model))
+        pos_encoding[:, 0::2] = torch.sin(position * div_term)
+        pos_encoding[:, 1::2] = torch.cos(position * div_term)
+        return pos_encoding.unsqueeze(0)
     
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         """
