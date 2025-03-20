@@ -299,7 +299,7 @@ class TrackingTask(FlightTask):
     # other variables
     DEFAULT_EPISODE_TIME_S = 6.0
     INITIAL_HEADING_DEG = 270
-    THROTTLE_CMD = 0.51
+    THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
 
     def __init__(
@@ -491,15 +491,15 @@ class TrackingTask(FlightTask):
             sim[self.oppo_y_ft],
             sim[self.oppo_altitude_sl_ft]
         )
-        own_heading = prp.Vector3(
-            x=sim[prp.v_north_fps],
-            y=sim[prp.v_east_fps],
-            z=sim[prp.v_down_fps]
-        )
+        # own_heading = prp.Vector3(
+        #     x=sim[prp.v_north_fps],
+        #     y=sim[prp.v_east_fps],
+        #     z=sim[prp.v_down_fps]
+        # )
         sim[self.distance_oppo_ft] = (own_position-oppo_position).Norm()
-        sim[self.track_angle_rad] = prp.Vector3.cal_angle(
-            oppo_position-own_position, own_heading
-        )
+        # sim[self.track_angle_rad] = prp.Vector3.cal_angle(
+        #     oppo_position-own_position, own_heading
+        # )
         sim[self.bearing_pointMass_rad] = prp.Vector3.cal_angle(
             (oppo_position-own_position).project_to_plane("xy"), 
             prp.Vector3(x=1, y=0, z=0)
@@ -518,6 +518,10 @@ class TrackingTask(FlightTask):
         )
         Rb = Q.inverse * R * Q
         rbx, rby, rbz = Rb.vector
+        sim[self.track_angle_rad] = prp.Vector3.cal_angle(
+            prp.Vector3(rbx, rby, rbz),
+            prp.Vector3(1, 0, 0)
+        )
 
         sim[self.bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
         sim[self.elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))

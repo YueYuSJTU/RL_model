@@ -161,7 +161,16 @@ class SimStub(object):
         sim[prp.heading_deg] = 270
         sim[prp.v_north_fps] = 0
         sim[prp.v_east_fps] = -200.0  # corresp. to travel at track 270 deg
+        sim[prp.v_down_fps] = 0
         sim[prp.altitude_sl_ft] = task.INITIAL_ALTITUDE_FT
+
+        sim[prp.ecef_x_ft] = 13080424.483009282
+        sim[prp.ecef_y_ft] = -531606.7851935714
+        sim[prp.ecef_z_ft] = 16276572.111242484
+
+        sim[prp.psi_rad] = 0.0
+        sim[prp.pitch_rad] = 0.0
+        sim[prp.roll_rad] = 0.0
         return sim
 
 

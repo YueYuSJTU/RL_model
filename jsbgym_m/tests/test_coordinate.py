@@ -8,10 +8,10 @@ class TestGPSUtils(unittest.TestCase):
 
     def setUp(self):
         self.gps_utils = GPS_utils('m')
-        self.gps_utils.setENUorigin(37.7749, -122.4194, 10)  # 设置原点为旧金山
+        self.gps_utils.setENUorigin(np.array([37.7749]), np.array([-122.4194]), np.array([10]))  # 设置原点为旧金山
 
         self.ft_gps = GPS_utils('ft')
-        self.ft_gps.setENUorigin(37.7749, -122.4194, 10/0.3048)  # 设置原点为旧金山
+        self.ft_gps.setENUorigin(np.array([37.7749]), np.array([-122.4194]), np.array([10/0.3048]))  # 设置原点为旧金山
 
     def test_geo2ecef(self):
         lat, lon, height = 37.7749, -122.4194, 10

@@ -234,9 +234,15 @@ class Vector2(object):
 
 class Vector3(object):
     def __init__(self, x: float, y: float, z: float):
-        self.x = x
-        self.y = y
-        self.z = z
+        # 确保x, y, z是标量
+        def to_scalar(val):
+            if hasattr(val, 'item'):
+                return val.item()  # 处理NumPy数组
+            return float(val)  # 处理其他类型
+            
+        self.x = to_scalar(x)
+        self.y = to_scalar(y)
+        self.z = to_scalar(z)
     
     def Norm(self):
         return math.sqrt(self.x**2 + self.y**2 + self.z**2)

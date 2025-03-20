@@ -6,7 +6,17 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 import numpy as np
 import sys
-sys.path.insert(0, "D:\Work_File\RL\jsbgym")
+import os
+def add_path(debug = False):
+    # 将项目根目录添加到sys.path（使用相对路径）
+    current_file_path = os.path.abspath(__file__)
+    src_dir = os.path.dirname(os.path.dirname(current_file_path))  # src目录
+    project_root = os.path.dirname(src_dir)  # 项目根目录
+    if debug:
+        print(f"Debug: project root is {project_root}")
+    sys.path.insert(0, project_root)
+add_path()
+# sys.path.insert(0, "D:\Work_File\RL\jsbgym")
 import jsbgym_m             # type: ignore
 
 # 模型存储位置
@@ -25,8 +35,8 @@ skipTimes = 3
 # gym.utils.seeding.np_random(seed)
 
 # Create environment
-# plane = "C172"
-plane = "F16"
+plane = "C172"
+# plane = "F16"
 
 # task = "HeadingControlTask"
 # task = "SmoothHeadingTask"

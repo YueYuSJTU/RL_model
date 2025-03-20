@@ -22,6 +22,12 @@ SOFTWARE.
 
 import numpy as np
 
+# 确保x, y, z是标量
+def to_scalar(val):
+	if hasattr(val, 'item'):
+		return val.item()  # 处理NumPy数组
+	return float(val)  # 处理其他类型
+
 class GPS_utils:
 	'''
 		Contains the algorithms to convert a gps signal (longitude, latitude, height)
@@ -48,7 +54,7 @@ class GPS_utils:
 		self.xZero = None
 		self.yZero = None
 		self.zZero = None
-		self.R = np.asmatrix(np.eye(3))
+		self.R = np.eye(3)
 		
 		self.unit = unit
 		if unit not in ["m", "ft"]:
@@ -77,6 +83,10 @@ class GPS_utils:
 		cLmd = np.cos(lmd)
 		sPhi = np.sin(phi)
 		sLmd = np.sin(lmd)
+		cPhi = to_scalar(cPhi)
+		cLmd = to_scalar(cLmd)
+		sPhi = to_scalar(sPhi)
+		sLmd = to_scalar(sLmd)
 		
 		self.R[0, 0] = -sLmd
 		self.R[0, 1] =  cLmd
@@ -115,7 +125,7 @@ class GPS_utils:
 		x, y, z = x * self.unit_conversion, y * self.unit_conversion, z * self.unit_conversion
 		ecef = np.array([[x], [y], [z]])
 		
-		return np.asarray(self.R * (ecef - self.oZero)) / self.unit_conversion
+		return np.asarray(self.R @ (ecef - self.oZero)) / self.unit_conversion
 	
 	def geo2enu(self, lat, lon, height):
 		ecef = self.geo2ecef(lat, lon, height)
@@ -163,7 +173,7 @@ class GPS_utils:
 		yd =  cPhi * x - sPhi * sLmd * y + cLmd * sPhi * z
 		zd =  cLmd * y + sLmd * z
 		
-		return np.array([[x0+xd], [y0+yd], [z0+zd]]) / self.unit_conversion
+		return np.array([x0+xd, y0+yd, z0+zd]) / self.unit_conversion
 	
 	def enu2geo(self, x, y, z):
 		ecef = self.enu2ecef(x, y, z)

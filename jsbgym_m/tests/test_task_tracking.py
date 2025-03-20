@@ -3,6 +3,11 @@ import math
 import numpy as np
 import sys
 from pyquaternion import Quaternion
+import os
+current_file_path = os.path.abspath(__file__)
+src_dir = os.path.dirname(os.path.dirname(current_file_path))  # src目录
+project_root = os.path.dirname(src_dir)  # 项目根目录
+sys.path.insert(0, project_root)
 import jsbgym_m.properties as prp
 from jsbgym_m import rewards, utils
 from jsbgym_m.assessors import Assessor, AssessorImpl
@@ -61,6 +66,13 @@ class TestTrackingTask(unittest.TestCase):
         oppo_x=3000,
         oppo_y=3000,
         oppo_alt=-500,
+        heading_deg=270,
+        roll_rad=0.0,
+        pitch_rad=0.0,
+        speed=800,
+        v_north_fps=0,
+        v_east_fps=0,
+        v_down_fps=0,
     ) -> SimStub:
         if task is None:
             task = self.task
@@ -68,7 +80,9 @@ class TestTrackingTask(unittest.TestCase):
         task.observe_first_state(sim)
 
         sim = self.modify_sim_to_state_(
-            sim, task, time_terminal, self_x, self_y, self_alt, oppo_x, oppo_y, oppo_alt
+            sim, task, time_terminal, self_x, self_y, self_alt, 
+            oppo_x, oppo_y, oppo_alt, heading_deg, roll_rad, pitch_rad, speed,
+            v_north_fps, v_east_fps, v_down_fps
         )
         
         # 重置task的last_state属性
@@ -91,6 +105,9 @@ class TestTrackingTask(unittest.TestCase):
         roll_rad=0.0,
         pitch_rad=0.0,
         speed=800,
+        v_north_fps=0,
+        v_east_fps=0,
+        v_down_fps=0,
     ) -> SimStub:
         if task is None:
             task = self.task
@@ -107,12 +124,17 @@ class TestTrackingTask(unittest.TestCase):
         sim[prp.heading_deg] = heading_deg
         sim[prp.roll_rad] = roll_rad
         sim[prp.pitch_rad] = pitch_rad
+
         
         # 根据heading设置速度分量
         heading_rad = math.radians(heading_deg)
         sim[prp.v_north_fps] = speed * math.cos(heading_rad)
         sim[prp.v_east_fps] = speed * math.sin(heading_rad)
         sim[prp.v_down_fps] = 0
+        if v_down_fps != 0:
+            sim[prp.v_down_fps] = v_down_fps
+            sim[prp.v_north_fps] = v_north_fps
+            sim[prp.v_east_fps] = v_east_fps
         
         # 设置对手飞机状态
         sim[task.oppo_x_ft] = oppo_x
@@ -120,7 +142,8 @@ class TestTrackingTask(unittest.TestCase):
         sim[task.oppo_altitude_sl_ft] = oppo_alt
         
         # 更新计算属性
-        task._update_custom_properties(sim)
+        # task._update_custom_properties(sim)
+        # task._update_extra_properties(sim)
         
         return sim
 
@@ -169,132 +192,178 @@ class TestTrackingTask(unittest.TestCase):
         _ = self.task.observe_first_state(dummy_sim)
 
         # 检查引擎状态符合预期
-        self.assertAlmostEqual(self.task.THROTTLE_CMD/2, dummy_sim[prp.throttle_cmd])
+        self.assertAlmostEqual(self.task.THROTTLE_CMD, dummy_sim[prp.throttle_cmd])
         self.assertAlmostEqual(self.task.MIXTURE_CMD, dummy_sim[prp.mixture_cmd])
         self.assertAlmostEqual(1.0, dummy_sim[prp.engine_running])
 
-    # def test_task_step_correct_return_types(self):
-    #     sim = SimStub.make_valid_state_stub(self.task)
-    #     steps = 1
-    #     _ = self.task.observe_first_state(sim)
+    def test_task_step_correct_return_types(self):
+        sim = SimStub.make_valid_state_stub(self.task)
+        steps = 1
+        _ = self.task.observe_first_state(sim)
 
-    #     state, reward, is_terminal, truncated, info = self.task.task_step(
-    #         sim, self.dummy_action, steps
-    #     )
+        state, reward, is_terminal, truncated, info = self.task.task_step(
+            sim, self.dummy_action, steps
+        )
 
-    #     self.assertIsInstance(state, tuple)
-    #     self.assertEqual(len(state), len(self.task.state_variables))
-    #     self.assertIsInstance(reward, float)
-    #     self.assertIsInstance(is_terminal, bool)
-    #     self.assertIsInstance(info, dict)
+        self.assertIsInstance(state, tuple)
+        self.assertEqual(len(state), len(self.task.state_variables))
+        self.assertIsInstance(reward, float)
+        self.assertIsInstance(is_terminal, bool)
+        self.assertIsInstance(info, dict)
 
-    # def test_task_step_returns_non_terminal_time_less_than_max(self):
-    #     sim = self.get_initial_sim_with_state(self.task, time_terminal=False)
-    #     _ = self.task.observe_first_state(sim)
-    #     non_terminal_steps_left = 2
-    #     sim[self.task.steps_left] = non_terminal_steps_left
+    def test_task_step_returns_non_terminal_time_less_than_max(self):
+        sim = self.get_initial_sim_with_state(self.task, time_terminal=False)
+        _ = self.task.observe_first_state(sim)
+        non_terminal_steps_left = 2
+        sim[self.task.steps_left] = non_terminal_steps_left
 
-    #     _, _, is_terminal, _, _ = self.task.task_step(sim, self.dummy_action, 1)
+        _, _, is_terminal, _, _ = self.task.task_step(sim, self.dummy_action, 1)
 
-    #     self.assertFalse(is_terminal)
+        self.assertFalse(is_terminal)
 
-    # def test_task_step_returns_terminal_steps_zero(self):
-    #     sim = SimStub.make_valid_state_stub(self.task)
-    #     _ = self.task.observe_first_state(sim)
-    #     sim[self.task.steps_left] = 0
-    #     steps = 1
+    def test_task_step_returns_terminal_steps_zero(self):
+        sim = SimStub.make_valid_state_stub(self.task)
+        _ = self.task.observe_first_state(sim)
+        sim[self.task.steps_left] = 0
+        steps = 1
 
-    #     _, _, is_terminal, _, _ = self.task.task_step(sim, self.dummy_action, steps)
+        _, _, is_terminal, _, _ = self.task.task_step(sim, self.dummy_action, steps)
 
-    #     self.assertTrue(is_terminal)
+        self.assertTrue(is_terminal)
 
-    # def test_distance_calculation(self):
-    #     # 测试距离计算是否正确
-    #     self_x, self_y, self_alt = 100, 200, 5000
-    #     oppo_x, oppo_y, oppo_alt = 600, 800, -500
+    def test_distance_calculation(self):
+        # 测试距离计算是否正确
+        self_x, self_y, self_alt = 100, 200, 5000
+        oppo_x, oppo_y, oppo_alt = 600, 800, -500
         
-    #     sim = self.get_initial_sim_with_state(
-    #         self.task, 
-    #         time_terminal=False,
-    #         self_x=self_x, 
-    #         self_y=self_y, 
-    #         self_alt=self_alt,
-    #         oppo_x=oppo_x, 
-    #         oppo_y=oppo_y, 
-    #         oppo_alt=oppo_alt
-    #     )
+        sim = self.get_initial_sim_with_state(
+            self.task, 
+            time_terminal=False,
+            self_x=self_x, 
+            self_y=self_y, 
+            self_alt=self_alt,
+            oppo_x=oppo_x, 
+            oppo_y=oppo_y, 
+            oppo_alt=oppo_alt
+        )
+        self.task._update_extra_properties(sim)
+        # print(f"Debug: ned_X: {sim[self.task.ned_Xposition_ft]}")
         
-    #     # 计算预期的欧几里得距离
-    #     expected_distance = math.sqrt(
-    #         (oppo_x - self_x) ** 2 + 
-    #         (oppo_y - self_y) ** 2 + 
-    #         (oppo_alt - self_alt) ** 2
-    #     )
+        # 计算预期的欧几里得距离
+        expected_distance = math.sqrt(
+            (oppo_x - self_x) ** 2 + 
+            (oppo_y - self_y) ** 2 + 
+            (oppo_alt - self_alt) ** 2
+        )
         
-    #     # 验证计算的距离是否正确
-    #     self.assertAlmostEqual(
-    #         expected_distance, 
-    #         sim[self.task.distance_oppo_ft], 
-    #         delta=0.1,
-    #         msg="距离计算不正确"
-    #     )
+        # 验证计算的距离是否正确
+        self.assertAlmostEqual(
+            expected_distance, 
+            sim[self.task.distance_oppo_ft], 
+            delta=0.1,
+            msg="距离计算不正确"
+        )
 
-    # def test_track_angle_calculation(self):
-    #     # 测试跟踪角度计算是否正确
-    #     self_x, self_y, self_alt = 0, 0, 5000
-    #     oppo_x, oppo_y, oppo_alt = 1000, 1000, -500
-    #     heading_deg = 0  # 飞机朝北
-        
-    #     sim = self.modify_sim_to_state_(
-    #         SimStub.make_valid_state_stub(self.task),
-    #         self.task,
-    #         steps_terminal=False,
-    #         self_x=self_x,
-    #         self_y=self_y,
-    #         self_alt=self_alt,
-    #         oppo_x=oppo_x,
-    #         oppo_y=oppo_y,
-    #         oppo_alt=oppo_alt,
-    #         heading_deg=heading_deg
-    #     )
-        
-    #     # 从北向东计算的目标角度应该是45度(π/4)
-    #     expected_angle = math.radians(45)
-        
-    #     # 验证计算的角度是否接近预期值
-    #     self.assertAlmostEqual(
-    #         expected_angle,
-    #         sim[self.task.track_angle_rad],
-    #         delta=0.1,
-    #         msg="跟踪角度计算不正确"
-    #     )
+    def test_track_angle_calculation(self):
+        # 测试跟踪角度计算是否正确
+        self_x, self_y, self_alt = 0, 0, 5000
+        oppo_x, oppo_y, oppo_alt = 1000, 1000, 5000  # 目标在正东方向
+        sim = self.get_initial_sim_with_state(
+            self.task,
+            time_terminal=False,
+            self_x=self_x,
+            self_y=self_y,
+            self_alt=self_alt,
+            oppo_x=oppo_x,
+            oppo_y=oppo_y,
+            oppo_alt=oppo_alt
+        )
+        self.task._update_extra_properties(sim)
+        excepted_angle = math.radians(45)
+        self.assertAlmostEqual(
+            excepted_angle,
+            sim[self.task.track_angle_rad],
+            msg="跟踪角度计算不正确"
+        )
 
-    # def test_bearing_pointMass_calculation(self):
-    #     # 测试点质量方位角计算是否正确
-    #     self_x, self_y, self_alt = 0, 0, 5000
-    #     oppo_x, oppo_y, oppo_alt = 1000, 0, -500  # 目标在正东方向
+
+        oppo_x, oppo_y, oppo_alt = 1000, 2000, 10000
+        heading_deg = 0 
         
-    #     sim = self.get_initial_sim_with_state(
-    #         self.task, 
-    #         time_terminal=False,
-    #         self_x=self_x, 
-    #         self_y=self_y, 
-    #         self_alt=self_alt,
-    #         oppo_x=oppo_x, 
-    #         oppo_y=oppo_y, 
-    #         oppo_alt=oppo_alt
-    #     )
+        sim = self.get_initial_sim_with_state(
+            self.task,
+            time_terminal=False,
+            self_x=self_x,
+            self_y=self_y,
+            self_alt=self_alt,
+            oppo_x=oppo_x,
+            oppo_y=oppo_y,
+            oppo_alt=oppo_alt,
+            heading_deg=heading_deg
+        )
+        self.task._update_extra_properties(sim)
+        expected_angle = math.acos(1 / math.sqrt(30))
         
-    #     # 目标在正东方向，预期方位角为90度(π/2)
-    #     expected_bearing = math.radians(90)
+        # 验证计算的角度是否接近预期值
+        self.assertAlmostEqual(
+            expected_angle,
+            sim[self.task.track_angle_rad],
+            msg="跟踪角度计算不正确"
+        )
+
+        # 飞机有5度pitch的情形
+        pitch_rad = math.radians(5)
+        oppo_x, oppo_y, oppo_alt = 1000, 0, 5000
+        sim = self.get_initial_sim_with_state(
+            self.task,
+            time_terminal=False,
+            self_x=self_x,
+            self_y=self_y,
+            self_alt=self_alt,
+            oppo_x=oppo_x,
+            oppo_y=oppo_y,
+            oppo_alt=oppo_alt,
+            pitch_rad=pitch_rad
+        )
+        self.task._update_extra_properties(sim)
+        self.assertAlmostEqual(
+            pitch_rad,
+            sim[self.task.track_angle_rad],
+            msg="跟踪角度计算不正确"
+        )
+
+    def test_pointMass_calculation(self):
+        # 测试点质量方位角计算是否正确
+        self_x, self_y, self_alt = 0, 0, 5000
+        oppo_x, oppo_y, oppo_alt = 1000, 0, 5000  # 目标在正北方向
         
-    #     # 验证计算的方位角是否接近预期值
-    #     self.assertAlmostEqual(
-    #         expected_bearing, 
-    #         sim[self.task.bearing_pointMass_rad], 
-    #         delta=0.1,
-    #         msg="点质量方位角计算不正确"
-    #     )
+        sim = self.get_initial_sim_with_state(
+            self.task, 
+            time_terminal=False,
+            self_x=self_x, 
+            self_y=self_y, 
+            self_alt=self_alt,
+            oppo_x=oppo_x, 
+            oppo_y=oppo_y, 
+            oppo_alt=oppo_alt
+        )
+        self.task._update_extra_properties(sim)
+        
+        # 目标在正东方向，预期方位角为90度(π/2)
+        expected_bearing = math.radians(0)
+        excepted_elevation = math.radians(0)
+        
+        # 验证计算的方位角是否接近预期值
+        self.assertAlmostEqual(
+            expected_bearing, 
+            sim[self.task.bearing_pointMass_rad], 
+            msg="点质量方位角计算不正确"
+        )
+        self.assertAlmostEqual(
+            excepted_elevation,
+            sim[self.task.elevation_pointMass_rad],
+            msg="点质量仰角计算不正确"
+        )
 
     # def test_elevation_pointMass_calculation(self):
     #     # 测试点质量仰角计算是否正确
