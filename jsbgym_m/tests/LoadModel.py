@@ -10,7 +10,7 @@ sys.path.insert(0, "D:\Work_File\RL\jsbgym")
 import jsbgym_m             # type: ignore
 
 # 模型存储位置
-log_path="D:\Work_File\RL\JSBSim\logs\\"
+log_path="D:\Work_File\RL\RL_model\logs\\num12\\"
 # 读取模型选择
 model_name = "best_model"
 # model_name = "best_model_1805.4166278576747"
@@ -25,7 +25,8 @@ skipTimes = 3
 # gym.utils.seeding.np_random(seed)
 
 # Create environment
-plane = "C172"
+# plane = "C172"
+plane = "F16"
 
 # task = "HeadingControlTask"
 # task = "SmoothHeadingTask"
@@ -36,9 +37,9 @@ task = "TrajectoryTask"
 shape = "Shaping.EXTRA"
 
 # render_mode = "flightgear"
-render_mode = None
+# render_mode = None
 # render_mode = "graph"
-# render_mode = "human"
+render_mode = "human"
 
 # ======================================================================================================================
 
@@ -46,7 +47,7 @@ env_id = f"{plane}-{task}-{shape}-FG-v0" if render_mode == "flightgear" else f"{
 vec_env = DummyVecEnv([lambda: gym.make(env_id, render_mode=render_mode)])
 # vec_env = DummyVecEnv([lambda: SkipObsWrapper(gym.make(env_id), skip_step=skipStep, skip_times=skipTimes)])
 # vec_env.seed(seed)
-vec_env = VecNormalize.load(log_path + "final_train_env", vec_env)
+vec_env = VecNormalize.load(log_path + "final_train_env.pkl", vec_env)
 vec_env.training = False
 vec_env.norm_reward = False
 

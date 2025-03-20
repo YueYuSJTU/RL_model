@@ -5,12 +5,14 @@ import jsbgym_m             # type: ignore
 import gymnasium as gym
 import numpy as np
 
-plane = "C172"
+# plane = "C172"
+plane = "F16"
 
 # task = "HeadingControlTask"
 # task = "SmoothHeadingTask"
 # task = "TurnHeadingControlTask"
-task = "TrajectoryTask"
+# task = "TrajectoryTask"
+task = "TrackingTask"
 
 shape = "Shaping.STANDARD"
 # shape = "Shaping.EXTRA"

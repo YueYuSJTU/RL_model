@@ -1,7 +1,7 @@
 import math
 import collections
 from jsbgym_m import utils
-
+from pyquaternion import Quaternion
 
 class BoundedProperty(
     collections.namedtuple("BoundedProperty", ["name", "description", "min", "max"])
@@ -23,6 +23,7 @@ pitch_rad = BoundedProperty(
     "attitude/pitch-rad", "pitch [rad]", -0.5 * math.pi, 0.5 * math.pi
 )
 roll_rad = BoundedProperty("attitude/roll-rad", "roll [rad]", -math.pi, math.pi)
+psi_rad = BoundedProperty("attitude/psi-rad", "heading [rad]", -math.pi, math.pi)
 heading_deg = BoundedProperty("attitude/psi-deg", "heading [deg]", 0, 360)
 sideslip_deg = BoundedProperty("aero/beta-deg", "sideslip [deg]", -180, +180)
 lat_geod_deg = BoundedProperty(
@@ -49,8 +50,13 @@ dist_travel_lat_m = Property(
     "position/distance-from-start-lat-mt",
     "lateral distance travelled from starting position [m]",
 )
+alpha_deg = BoundedProperty("aero/alpha-deg", "angle of attack [deg]", -180, +180)
+beta_deg = BoundedProperty("aero/beta-deg", "sideslip [deg]", -180, +180)
 
 # velocities
+vtrue_fps = BoundedProperty(
+    "velocities/vtrue-fps", "true airspeed [ft/s]", 0, 2200
+)
 u_fps = BoundedProperty(
     "velocities/u-fps", "body frame x-axis velocity [ft/s]", -2200, 2200
 )
@@ -80,6 +86,26 @@ r_radps = BoundedProperty(
 )
 altitude_rate_fps = Property("velocities/h-dot-fps", "Rate of altitude change [ft/s]")
 
+# accelerations
+ax_fps2 = BoundedProperty(
+    "accelerations/udot-ft_sec2", "body frame x-axis acceleration [ft/s^2]", float("-inf"), float("+inf")
+)
+ay_fps2 = BoundedProperty(
+    "accelerations/vdot-ft_sec2", "body frame y-axis acceleration [ft/s^2]", float("-inf"), float("+inf")
+)
+az_fps2 = BoundedProperty(
+    "accelerations/wdot-ft_sec2", "body frame z-axis acceleration [ft/s^2]", float("-inf"), float("+inf")
+)
+aroll_radps2 = BoundedProperty(
+    "accelerations/pdot-rad_sec2", "roll acceleration [rad/s^2]", float("-inf"), float("+inf")
+)
+apitch_radps2 = BoundedProperty(
+    "accelerations/qdot-rad_sec2", "pitch acceleration [rad/s^2]", float("-inf"), float("+inf")
+)
+ayaw_radps2 = BoundedProperty(
+    "accelerations/rdot-rad_sec2", "yaw acceleration [rad/s^2]", float("-inf"), float("+inf")
+)
+
 # controls state
 aileron_left = BoundedProperty(
     "fcs/left-aileron-pos-norm", "left aileron position, normalised", -1, 1
@@ -94,6 +120,9 @@ rudder = BoundedProperty("fcs/rudder-pos-norm", "rudder position, normalised", -
 throttle = BoundedProperty(
     "fcs/throttle-pos-norm", "throttle position, normalised", 0, 1
 )
+throttle_Aug = BoundedProperty(
+    "fcs/throttle-pos-norm", "throttle position, normalised, with Augmentation", 0, 2
+)
 gear = BoundedProperty("gear/gear-pos-norm", "landing gear position, normalised", 0, 1)
 
 # engines
@@ -101,7 +130,13 @@ engine_running = Property("propulsion/engine/set-running", "engine running (0/1 
 all_engine_running = Property(
     "propulsion/set-running", "set engine running (-1 for all engines)"
 )
-engine_thrust_lbs = Property("propulsion/engine/thrust-lbs", "engine thrust [lb]")
+# engine_thrust_lbs = Property("propulsion/engine/thrust-lbs", "engine thrust [lb]")
+engine_thrust_lbs = BoundedProperty(
+    "propulsion/engine/thrust-lbs", "engine thrust [lb]", float("-inf"), float("+inf")
+)
+total_fuel = BoundedProperty(
+    "propulsion/total-fuel-lbs", "total fuel on board [lb]", 0, 10000
+)
 
 # controls command
 aileron_cmd = BoundedProperty(
@@ -127,6 +162,18 @@ mixture_1_cmd = BoundedProperty(
 )
 gear_all_cmd = BoundedProperty(
     "gear/gear-cmd-norm", "all landing gear commanded position, normalised", 0, 1
+)
+teflap_position_norm = BoundedProperty(
+    "fcs/tef-pos-norm", "trailing edge flap position, normalised", 0, 1
+)
+leflap_position_norm = BoundedProperty(
+    "fcs/lef-pos-norm", "leading edge flap position, normalised", 0, 1
+)
+left_dht_rad = BoundedProperty(
+    "fcs/dht-left-pos-rad", "left differential horizontal tail angle [rad]", -math.pi, math.pi
+)
+right_dht_rad = BoundedProperty(
+    "fcs/dht-right-pos-rad", "right differential horizontal tail angle [rad]", -math.pi, math.pi
 )
 
 # simulation
@@ -185,6 +232,55 @@ class Vector2(object):
     def __sub__(self, other: "Vector2") -> "Vector2":
         return Vector2(self.x - other.x, self.y - other.y)
 
+class Vector3(object):
+    def __init__(self, x: float, y: float, z: float):
+        self.x = x
+        self.y = y
+        self.z = z
+    
+    def Norm(self):
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+    
+    def get_xyz(self):
+        return self.x, self.y, self.z
+    
+    def __sub__(self, other: "Vector3") -> "Vector3":
+        return Vector3(self.x - other.x, self.y - other.y, self.z - other.z)
+    
+    @staticmethod
+    def cal_angle(v1: "Vector3", v2: "Vector3") -> float:
+        return math.acos((v1.x*v2.x + v1.y*v2.y + v1.z*v2.z)/(v1.Norm()*v2.Norm()))
+    
+    @staticmethod
+    def Eular2Vector3(psi: float, theta: float) -> "Vector3":
+        x = math.cos(psi) * math.cos(theta)
+        y = math.sin(psi) * math.cos(theta)
+        z = math.sin(theta)
+        return Vector3(x, y, z)
+    
+    def project_to_plane(self, plane: str) -> "Vector2":
+        if plane == "xy":
+            return Vector3(self.x, self.y, 0)
+        elif plane == "yz":
+            return Vector3(0, self.y, self.z)
+        elif plane == "xz":
+            return Vector3(self.x, 0, self.z)
+        else:
+            raise ValueError("Invalid plane. Choose from 'xy', 'yz', or 'xz'.")
+
+def Eular2Quaternion(psi: float, theta: float, phi: float) -> "Quaternion":
+    q = Quaternion(axis=[0, 0, 1], angle=psi) * Quaternion(axis=[0, 1, 0], angle=theta) * Quaternion(axis=[1, 0, 0], angle=phi)
+    # cy = math.cos(psi * 0.5)
+    # sy = math.sin(psi * 0.5)
+    # cp = math.cos(theta * 0.5)
+    # sp = math.sin(theta * 0.5)
+    # cr = math.cos(phi * 0.5)
+    # sr = math.sin(phi * 0.5)
+    # p = Quaternion(w=cr * cp * cy + sr * sp * sy,
+    #                x=sr * cp * cy - cr * sp * sy,
+    #                y=cr * sp * cy + sr * cp * sy,
+    #                z=cr * cp * sy - sr * sp * cy)
+    return q
 
 class GeodeticPosition(object):
     def __init__(self, latitude_deg: float, longitude_deg: float):

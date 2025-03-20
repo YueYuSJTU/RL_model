@@ -426,7 +426,7 @@ class TrajectoryTask(FlightTask):
         sim[self.enu_Yposition_ft] = y_enu
         sim[self.enu_Zposition_ft] = z_enu
     
-    def get_enu_position(self, sim: Simulation) -> list[float, float, float]:
+    def get_position(self, sim: Simulation) -> list[float, float, float]:
         return sim[self.enu_Xposition_ft], sim[self.enu_Yposition_ft], sim[self.enu_Zposition_ft]
 
     def _update_position_error(self, sim: Simulation):

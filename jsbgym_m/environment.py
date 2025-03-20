@@ -1,6 +1,7 @@
 import gymnasium as gym
 import numpy as np
 from jsbgym_m.tasks import Shaping, HeadingControlTask
+from jsbgym_m.task_tracking import TrackingTask
 from jsbgym_m.simulation import Simulation
 from jsbgym_m.visualiser import FigureVisualiser, FlightGearVisualiser, GraphVisualiser
 from jsbgym_m.aircraft import Aircraft, c172
@@ -100,7 +101,11 @@ class JsbSimEnv(gym.Env):
 
         # save reward components from info
         if self.render_mode == "human":
-            x, y, z = self.task.get_enu_position(self.sim)
+            if hasattr(self.task, "opponent"):
+                x, y, z, oppoX, oppoY, oppoZ = self.task.get_position(self.sim)
+                self.figure_visualiser.save_target(oppoX, oppoY, oppoZ)
+            else:
+                x, y, z = self.task.get_position(self.sim)
             self.figure_visualiser.save_position(x, y, z)
             self.figure_visualiser.save_reward_components(info["reward"])
 
@@ -112,6 +117,9 @@ class JsbSimEnv(gym.Env):
                           self.task._get_target_position("y"),
                           self.task._get_target_position("z")]
                 self.figure_visualiser.plot_position(target)
+                self.figure_visualiser.plot_reward_components()
+            elif hasattr(self.task, "opponent"):
+                self.figure_visualiser.plot_position("tracking")
                 self.figure_visualiser.plot_reward_components()
             else:
                 self.figure_visualiser.plot_position()

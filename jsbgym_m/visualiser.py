@@ -49,6 +49,7 @@ class FigureVisualiser(object):
         self.axes: AxesTuple = None
         self.value_texts: Tuple[plt.Text] = None
         self.positions: List[Tuple[float, float, float]] = []
+        self.target: List[float, float, float] = []
 
     def plot(self, sim: Simulation) -> None:
         """
@@ -266,6 +267,12 @@ class FigureVisualiser(object):
         """
         self.positions.append((x, y, z))
     
+    def save_target(self, x, y, z):
+        """
+        save target to self.positions
+        """
+        self.target.append([x, y, z])
+    
     def plot_position(self, target = None):
         """
         Plots the positions recorded during the simulation.
@@ -281,7 +288,19 @@ class FigureVisualiser(object):
         ax.plot(lats, longs, alts, label='Position')
         ax.scatter(lats[0], longs[0], alts[0], label='Start', color='r')
         ax.scatter(lats[-1], longs[-1], alts[-1], label='End', color='b')
-        if target:
+        if target == "tracking":
+            targetlats, targetlongs, targetalts = zip(*self.target)
+            targetlats = list(targetlats)
+            targetlongs = list(targetlongs)
+            targetalts = list(targetalts)
+            for i in range(len(targetlats)):
+                targetlats[i] = targetlats[i] + lats[0]
+                targetlongs[i] = targetlongs[i] + longs[0]
+                targetalts[i] = targetalts[i] + alts[0]
+            ax.plot(targetlats, targetlongs, targetalts, label='Target')
+            ax.scatter(targetlats[0], targetlongs[0], targetalts[0], color='r')
+            ax.scatter(targetlats[-1], targetlongs[-1], targetalts[-1], color='b')
+        elif target:
             ax.scatter(target[0], target[1], target[2], label='Target', color='g')
         ax.set_xlabel('x-Position')
         ax.set_ylabel('y-Position')

@@ -169,3 +169,42 @@ class GPS_utils:
 		ecef = self.enu2ecef(x, y, z)
 		
 		return self.ecef2geo(ecef.item(0), ecef.item(1), ecef.item(2))
+	
+
+class GPS_NED(GPS_utils):
+	'''
+		Contains the algorithms to convert a gps signal (longitude, latitude, height)
+		to a local cartesian NED system and vice versa
+		
+		Use setNEDorigin(lat, lon, height) to set the local NED coordinate system origin
+		Use geo2ned(lat, lon, height) to get the position in the local NED system
+		Use ned2geo(x_ned, y_ned, z_ned) to get the latitude, longitude and height
+	'''
+	
+	def __init__(self, unit = "m"):
+		super().__init__(unit)
+	
+	def setNEDorigin(self, lat, lon, height):
+		self.setENUorigin(lat, lon, height)
+	
+	def geo2ned(self, lat, lon, height):
+		x,y,z = self.geo2enu(lat, lon, height)
+		return self.enu2ned(x, y, z)
+	
+	def ned2geo(self, x, y, z):
+		x,y,z = self.ned2enu(x, y, z)
+		return self.enu2geo(x, y, z)
+	
+	def ned2enu(self, x, y, z):
+		return y, x, -z
+	
+	def enu2ned(self, x, y, z):
+		return y, x, -z
+	
+	def ecef2ned(self, x, y, z):
+		x,y,z = self.ecef2enu(x, y, z)
+		return self.enu2ned(x, y, z)
+	
+	def ned2ecef(self, x, y, z):
+		x,y,z = self.ned2enu(x, y, z)
+		return self.enu2ecef(x, y, z)
