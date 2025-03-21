@@ -253,6 +253,9 @@ class Vector3(object):
     def __sub__(self, other: "Vector3") -> "Vector3":
         return Vector3(self.x - other.x, self.y - other.y, self.z - other.z)
     
+    def __str__(self):
+        return f"Vector3({self.x}, {self.y}, {self.z})"
+    
     @staticmethod
     def cal_angle(v1: "Vector3", v2: "Vector3") -> float:
         return math.acos((v1.x*v2.x + v1.y*v2.y + v1.z*v2.z)/(v1.Norm()*v2.Norm()))

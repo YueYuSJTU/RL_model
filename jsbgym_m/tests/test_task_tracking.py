@@ -66,9 +66,10 @@ class TestTrackingTask(unittest.TestCase):
         oppo_x=3000,
         oppo_y=3000,
         oppo_alt=-500,
-        heading_deg=270,
+        heading_deg=0,
         roll_rad=0.0,
         pitch_rad=0.0,
+        psi_rad=0.0,
         speed=800,
         v_north_fps=0,
         v_east_fps=0,
@@ -81,8 +82,8 @@ class TestTrackingTask(unittest.TestCase):
 
         sim = self.modify_sim_to_state_(
             sim, task, time_terminal, self_x, self_y, self_alt, 
-            oppo_x, oppo_y, oppo_alt, heading_deg, roll_rad, pitch_rad, speed,
-            v_north_fps, v_east_fps, v_down_fps
+            oppo_x, oppo_y, oppo_alt, heading_deg, roll_rad, pitch_rad,psi_rad,
+            speed, v_north_fps, v_east_fps, v_down_fps
         )
         
         # 重置task的last_state属性
@@ -101,9 +102,10 @@ class TestTrackingTask(unittest.TestCase):
         oppo_x=3000,
         oppo_y=3000,
         oppo_alt=-500,
-        heading_deg=270,
+        heading_deg=0,
         roll_rad=0.0,
         pitch_rad=0.0,
+        psi_rad=0.0,
         speed=800,
         v_north_fps=0,
         v_east_fps=0,
@@ -124,7 +126,7 @@ class TestTrackingTask(unittest.TestCase):
         sim[prp.heading_deg] = heading_deg
         sim[prp.roll_rad] = roll_rad
         sim[prp.pitch_rad] = pitch_rad
-
+        sim[prp.psi_rad] = psi_rad
         
         # 根据heading设置速度分量
         heading_rad = math.radians(heading_deg)
@@ -365,181 +367,191 @@ class TestTrackingTask(unittest.TestCase):
             msg="点质量仰角计算不正确"
         )
 
-    # def test_elevation_pointMass_calculation(self):
-    #     # 测试点质量仰角计算是否正确
-    #     self_x, self_y, self_alt = 0, 0, 5000
-    #     oppo_x, oppo_y, oppo_alt = 1000, 0, 4000  # 目标在下方
-        
-    #     sim = self.get_initial_sim_with_state(
-    #         self.task, 
-    #         time_terminal=False,
-    #         self_x=self_x, 
-    #         self_y=self_y, 
-    #         self_alt=self_alt,
-    #         oppo_x=oppo_x, 
-    #         oppo_y=oppo_y, 
-    #         oppo_alt=oppo_alt
-    #     )
-        
-    #     # 计算预期的仰角，目标在飞机下方
-    #     dx = oppo_x - self_x
-    #     dz = self_alt - oppo_alt  # z轴正方向向上
-    #     expected_elevation = math.atan2(dz, dx)
-        
-    #     # 验证计算的仰角是否接近预期值
-    #     self.assertAlmostEqual(
-    #         expected_elevation, 
-    #         sim[self.task.elevation_pointMass_rad], 
-    #         delta=0.1,
-    #         msg="点质量仰角计算不正确"
-    #     )
+        expected_bearing = math.radians(35.8)
+        expected_elevation = math.radians(14.5)
+        r = 1000
 
-    # def test_bearing_accountingRollPitch_calculation(self):
-    #     # 测试考虑滚转和俯仰的方位角计算
-    #     self_x, self_y, self_alt = 0, 0, 5000
-    #     oppo_x, oppo_y, oppo_alt = 1000, 0, -500
-    #     heading_deg = 0  # 朝北
-    #     roll_rad = math.radians(30)  # 30度滚转
-    #     pitch_rad = math.radians(10)  # 10度俯仰
-        
-    #     sim = self.modify_sim_to_state_(
-    #         SimStub.make_valid_state_stub(self.task),
-    #         self.task,
-    #         steps_terminal=False,
-    #         self_x=self_x,
-    #         self_y=self_y,
-    #         self_alt=self_alt,
-    #         oppo_x=oppo_x,
-    #         oppo_y=oppo_y,
-    #         oppo_alt=oppo_alt,
-    #         heading_deg=heading_deg,
-    #         roll_rad=roll_rad,
-    #         pitch_rad=pitch_rad
-    #     )
-        
-    #     # 验证考虑滚转和俯仰的方位角与不考虑滚转和俯仰的方位角有所不同
-    #     self.assertNotEqual(
-    #         sim[self.task.bearing_pointMass_rad],
-    #         sim[self.task.bearing_accountingRollPitch_rad],
-    #         msg="考虑滚转和俯仰的方位角计算不正确"
-    #     )
+        oppo_x = r * math.cos(expected_elevation) * math.cos(expected_bearing)
+        oppo_y = r * math.cos(expected_elevation) * math.sin(expected_bearing)
+        oppo_alt = self_alt + r * math.sin(expected_elevation)
+        # 期望psi和pitch不影响
+        psi_rad = math.radians(10)
+        pitch_rad = math.radians(5)
+        sim = self.get_initial_sim_with_state(
+            self.task,
+            time_terminal=False,
+            self_x=self_x,
+            self_y=self_y,
+            self_alt=self_alt,
+            oppo_x=oppo_x,
+            oppo_y=oppo_y,
+            oppo_alt=oppo_alt,
+            psi_rad=psi_rad,
+            roll_rad=0,
+            pitch_rad=pitch_rad
+        )
+        self.task._update_extra_properties(sim)
 
-    # def test_elevation_accountingRollPitch_calculation(self):
-    #     # 测试考虑滚转和俯仰的仰角计算
-    #     self_x, self_y, self_alt = 0, 0, 5000
-    #     oppo_x, oppo_y, oppo_alt = 1000, 0, -500
-    #     heading_deg = 0  # 朝北
-    #     roll_rad = math.radians(30)  # 30度滚转
-    #     pitch_rad = math.radians(10)  # 10度俯仰
+        self.assertAlmostEqual(
+            expected_bearing, 
+            sim[self.task.bearing_pointMass_rad], 
+            msg="点质量方位角计算不正确"
+        )
+        self.assertAlmostEqual(
+            math.degrees(expected_elevation),
+            math.degrees(sim[self.task.elevation_pointMass_rad]),
+            msg="点质量仰角计算不正确"
+        )
         
-    #     sim = self.modify_sim_to_state_(
-    #         SimStub.make_valid_state_stub(self.task),
-    #         self.task,
-    #         steps_terminal=False,
-    #         self_x=self_x,
-    #         self_y=self_y,
-    #         self_alt=self_alt,
-    #         oppo_x=oppo_x,
-    #         oppo_y=oppo_y,
-    #         oppo_alt=oppo_alt,
-    #         heading_deg=heading_deg,
-    #         roll_rad=roll_rad,
-    #         pitch_rad=pitch_rad
-    #     )
-        
-    #     # 验证考虑滚转和俯仰的仰角与不考虑滚转和俯仰的仰角有所不同
-    #     self.assertNotEqual(
-    #         sim[self.task.elevation_pointMass_rad],
-    #         sim[self.task.elevation_accountingRollPitch_rad],
-    #         msg="考虑滚转和俯仰的仰角计算不正确"
-    #     )
 
-    # def test_opponent_state_update(self):
-    #     # 测试对手飞机状态更新
-    #     sim = SimStub.make_valid_state_stub(self.task)
-    #     _ = self.task.observe_first_state(sim)
+    def test_bearing_accountingRollPitch_calculation(self):
+        # 测试考虑滚转和俯仰的方位角计算
+        self_x, self_y, self_alt = 0, 0, 5000
+        oppo_x, oppo_y, oppo_alt = 1000, 0, 5000
+        roll_rad = math.radians(0)  # 30度滚转
+        pitch_rad = math.radians(10)  # 10度俯仰
         
-    #     # 记录初始状态
-    #     initial_x = sim[self.task.oppo_x_ft]
-    #     initial_y = sim[self.task.oppo_y_ft]
+        sim = self.get_initial_sim_with_state(
+            self.task,
+            time_terminal=False,
+            self_x=self_x,
+            self_y=self_y,
+            self_alt=self_alt,
+            oppo_x=oppo_x,
+            oppo_y=oppo_y,
+            oppo_alt=oppo_alt,
+            roll_rad=roll_rad,
+            pitch_rad=pitch_rad
+        )
+        self.task._update_extra_properties(sim)
         
-    #     # 模拟一步后状态更新
-    #     steps = 1
-    #     _, _, _, _, _ = self.task.task_step(sim, self.dummy_action, steps)
-        
-    #     # 对手应该移动了
-    #     self.assertNotEqual(initial_x, sim[self.task.oppo_x_ft])
-    #     self.assertNotEqual(initial_y, sim[self.task.oppo_y_ft])
+        self.assertAlmostEqual(
+            pitch_rad,
+            sim[self.task.elevation_accountingRollPitch_rad],
+            msg="考虑滚转和俯仰的方位角计算不正确"
+        )
 
-    # def test_opponent_reset(self):
-    #     # 测试对手重置功能
-    #     opponent = Opponent()
-        
-    #     # 记录初始状态
-    #     opponent.reset()
-    #     initial_point = opponent.init_point
-    #     initial_direction = opponent.init_direction
-    #     initial_speed = opponent.init_speed
-        
-    #     # 再次重置
-    #     opponent.reset()
-        
-    #     # 重置后应该有新的随机值
-    #     self.assertNotEqual(initial_point, opponent.init_point)
-    #     self.assertNotEqual(initial_direction, opponent.init_direction)
-    #     self.assertNotEqual(initial_speed, opponent.init_speed)
+        psi_rad = math.radians(30)
+        pitch_rad = math.radians(40)
+        roll_rad = math.radians(60)     # 应当无影响
+        expected_bearing = math.radians(30)
+        expected_elevation = math.radians(40)
+        r = 1000
 
-    # def test_opponent_step(self):
-    #     # 测试对手step方法
-    #     opponent = Opponent()
-    #     opponent.reset()
-        
-    #     # 记录初始状态
-    #     initial_state = opponent.get_state()
-        
-    #     # 模拟一步
-    #     frequency = 5.0
-    #     new_state = opponent.step(frequency)
-        
-    #     # 位置应该发生变化
-    #     self.assertNotEqual(initial_state["x_position_ft"], new_state["x_position_ft"])
-    #     self.assertNotEqual(initial_state["y_position_ft"], new_state["y_position_ft"])
-        
-    #     # 验证位置变化符合运动方向和速度
-    #     time = 1 / frequency
-    #     expected_x = initial_state["x_position_ft"] + initial_state["u_fps"] * time * math.cos(math.radians(initial_state["heading_deg"]))
-    #     expected_y = initial_state["y_position_ft"] + initial_state["u_fps"] * time * math.sin(math.radians(initial_state["heading_deg"]))
-        
-    #     self.assertAlmostEqual(expected_x, new_state["x_position_ft"], delta=0.1)
-    #     self.assertAlmostEqual(expected_y, new_state["y_position_ft"], delta=0.1)
+        oppo_x = r * math.cos(expected_elevation) * math.cos(expected_bearing)
+        oppo_y = r * math.cos(expected_elevation) * math.sin(expected_bearing)
+        oppo_alt = self_alt + r * math.sin(expected_elevation)
 
-    # def test_quaternion_rotation(self):
-    #     # 测试四元数旋转计算
-    #     # 这是对bearing_accountingRollPitch_rad和elevation_accountingRollPitch_rad计算的底层验证
+        sim = self.get_initial_sim_with_state(
+            self.task,
+            time_terminal=False,
+            self_x=self_x,
+            self_y=self_y,
+            self_alt=self_alt,
+            oppo_x=oppo_x,
+            oppo_y=oppo_y,
+            oppo_alt=oppo_alt,
+            psi_rad=psi_rad,
+            roll_rad=roll_rad,
+            pitch_rad=pitch_rad
+        )
+        self.task._update_extra_properties(sim)
+
+        self.assertAlmostEqual(
+            0,
+            sim[self.task.bearing_accountingRollPitch_rad],
+        )
+        self.assertAlmostEqual(
+            0,
+            sim[self.task.elevation_accountingRollPitch_rad],
+        )
         
-    #     # 创建一个相对位置向量
-    #     dlt_x, dlt_y, dlt_z = 1000, 500, 200
-    #     R = Quaternion(0, dlt_x, dlt_y, dlt_z)
+    def test_opponent_state_update(self):
+        # 测试对手飞机状态更新
+        sim = SimStub.make_valid_state_stub(self.task)
+        _ = self.task.observe_first_state(sim)
         
-    #     # 创建一个旋转四元数 (假设绕Z轴旋转45度)
-    #     Q = Quaternion(axis=[0, 0, 1], radians=math.radians(45))
+        # 记录初始状态
+        initial_x = sim[self.task.oppo_x_ft]
+        initial_y = sim[self.task.oppo_y_ft]
         
-    #     # 执行旋转
-    #     Rb = Q.inverse * R * Q
-    #     rbx, rby, rbz = Rb.vector
+        # 模拟一步后状态更新
+        steps = 1
+        _, _, _, _, _ = self.task.task_step(sim, self.dummy_action, steps)
         
-    #     # 验证旋转后的向量与原向量不同
-    #     self.assertNotEqual(dlt_x, rbx)
-    #     self.assertNotEqual(dlt_y, rby)
-    #     self.assertEqual(dlt_z, rbz)  # z轴旋转不应改变z分量
+        # 对手应该移动了
+        self.assertNotEqual(initial_x, sim[self.task.oppo_x_ft])
+        self.assertNotEqual(initial_y, sim[self.task.oppo_y_ft])
+
+    def test_opponent_reset(self):
+        # 测试对手重置功能
+        opponent = Opponent()
         
-    #     # 计算方位角和仰角
-    #     bearing = math.atan2(rby, rbx)
-    #     elevation = math.atan2(rbz, math.sqrt(rbx**2 + rby**2))
+        # 记录初始状态
+        opponent.reset()
+        initial_point = opponent.init_point
+        initial_direction = opponent.init_direction
+        initial_speed = opponent.init_speed
         
-    #     # 验证计算的角度是合理的
-    #     self.assertTrue(-math.pi <= bearing <= math.pi)
-    #     self.assertTrue(-math.pi/2 <= elevation <= math.pi/2)
+        # 再次重置
+        opponent.reset()
+        
+        # 重置后应该有新的随机值
+        self.assertNotEqual(initial_point, opponent.init_point)
+        self.assertNotEqual(initial_direction, opponent.init_direction)
+        self.assertNotEqual(initial_speed, opponent.init_speed)
+
+    def test_opponent_step(self):
+        # 测试对手step方法
+        opponent = Opponent()
+        opponent.reset()
+        
+        # 记录初始状态
+        initial_state = opponent.get_state()
+        
+        # 模拟一步
+        frequency = 5.0
+        new_state = opponent.step(frequency)
+        
+        # 位置应该发生变化
+        self.assertNotEqual(initial_state["x_position_ft"], new_state["x_position_ft"])
+        self.assertNotEqual(initial_state["y_position_ft"], new_state["y_position_ft"])
+        
+        # 验证位置变化符合运动方向和速度
+        time = 1 / frequency
+        expected_x = initial_state["x_position_ft"] + initial_state["u_fps"] * time * math.cos(math.radians(initial_state["heading_deg"]))
+        expected_y = initial_state["y_position_ft"] + initial_state["u_fps"] * time * math.sin(math.radians(initial_state["heading_deg"]))
+        
+        self.assertAlmostEqual(expected_x, new_state["x_position_ft"], delta=0.1)
+        self.assertAlmostEqual(expected_y, new_state["y_position_ft"], delta=0.1)
+
+    def test_quaternion_rotation(self):
+        # 测试四元数旋转计算
+        # 这是对bearing_accountingRollPitch_rad和elevation_accountingRollPitch_rad计算的底层验证
+        
+        # 创建一个相对位置向量
+        dlt_x, dlt_y, dlt_z = 1000, 500, 200
+        R = Quaternion(0, dlt_x, dlt_y, dlt_z)
+        
+        # 创建一个旋转四元数 (假设绕Z轴旋转45度)
+        Q = Quaternion(axis=[0, 0, 1], radians=math.radians(45))
+        
+        # 执行旋转
+        Rb = Q.inverse * R * Q
+        rbx, rby, rbz = Rb.vector
+        
+        # 验证旋转后的向量与原向量不同
+        self.assertNotEqual(dlt_x, rbx)
+        self.assertNotEqual(dlt_y, rby)
+        self.assertEqual(dlt_z, rbz)  # z轴旋转不应改变z分量
+        
+        # 计算方位角和仰角
+        bearing = math.atan2(rby, rbx)
+        elevation = math.atan2(rbz, math.sqrt(rbx**2 + rby**2))
+        
+        # 验证计算的角度是合理的
+        self.assertTrue(-math.pi <= bearing <= math.pi)
+        self.assertTrue(-math.pi/2 <= elevation <= math.pi/2)
 
 if __name__ == "__main__":
     unittest.main()

@@ -123,7 +123,7 @@ class Opponent(object):
 
         :return: the state of the opponent aircraft
         """
-        return self._state
+        return self._state.copy()
 
 
 class TrackingTask(FlightTask):
@@ -297,8 +297,8 @@ class TrackingTask(FlightTask):
     )
 
     # other variables
-    DEFAULT_EPISODE_TIME_S = 6.0
-    INITIAL_HEADING_DEG = 270
+    DEFAULT_EPISODE_TIME_S = 60.0
+    INITIAL_HEADING_DEG = 0
     THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
 
@@ -449,29 +449,22 @@ class TrackingTask(FlightTask):
             sim[self.ned_Yposition_ft],
             sim[prp.altitude_sl_ft]
         )
-        # TODO:两个角度的计算正确性待验证
-        oppo_heading = prp.Vector3.Eular2Vector3(
-            psi=oppo_state["heading_deg"],
-            theta=oppo_state["pitch_rad"]
-        )
 
-        sim[self.oppo_track_angle_rad] = prp.Vector3.cal_angle(
-            own_position-oppo_position, oppo_heading
-        )
         sim[self.oppo_bearing_pointMass_rad] = prp.Vector3.cal_angle(
             (own_position-oppo_position).project_to_plane("xy"), 
             prp.Vector3(x=1, y=0, z=0)
         )
-        sim[self.oppo_elevation_pointMass_rad] = prp.Vector3.cal_angle(
-            (own_position-oppo_position).project_to_plane("xz"), 
-            prp.Vector3(x=0, y=0, z=-1)
-        )
 
         dlt_x, dlt_y, dlt_z = (own_position-oppo_position).get_xyz()
-        R = Quaternion(0, dlt_x, dlt_y, dlt_z)
+        sim[self.oppo_elevation_pointMass_rad] = math.atan2(dlt_z, math.sqrt(dlt_x**2+dlt_y**2))
+        R = Quaternion(0, dlt_x, dlt_y, -dlt_z)
         Q = Quaternion(axis=[0,0,1], radians=math.radians(oppo_state["heading_deg"]))
         Rb = Q.inverse * R * Q
         rbx, rby, rbz = Rb.vector
+        sim[self.oppo_track_angle_rad] = prp.Vector3.cal_angle(
+            prp.Vector3(rbx, rby, rbz),
+            prp.Vector3(1, 0, 0)
+        )
 
         sim[self.oppo_bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
         sim[self.oppo_elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
@@ -491,26 +484,17 @@ class TrackingTask(FlightTask):
             sim[self.oppo_y_ft],
             sim[self.oppo_altitude_sl_ft]
         )
-        # own_heading = prp.Vector3(
-        #     x=sim[prp.v_north_fps],
-        #     y=sim[prp.v_east_fps],
-        #     z=sim[prp.v_down_fps]
-        # )
+
         sim[self.distance_oppo_ft] = (own_position-oppo_position).Norm()
-        # sim[self.track_angle_rad] = prp.Vector3.cal_angle(
-        #     oppo_position-own_position, own_heading
-        # )
         sim[self.bearing_pointMass_rad] = prp.Vector3.cal_angle(
             (oppo_position-own_position).project_to_plane("xy"), 
             prp.Vector3(x=1, y=0, z=0)
         )
-        sim[self.elevation_pointMass_rad] = prp.Vector3.cal_angle(
-            (oppo_position-own_position).project_to_plane("xz"), 
-            prp.Vector3(x=0, y=0, z=1)
-        )
-
         dlt_x, dlt_y, dlt_z = (oppo_position-own_position).get_xyz()
-        R = Quaternion(0, dlt_x, dlt_y, dlt_z)
+        sim[self.elevation_pointMass_rad] = math.atan2(dlt_z, math.sqrt(dlt_x**2+dlt_y**2))
+        
+        # 这里取-dlt_z是因为ned坐标系的z轴朝下
+        R = Quaternion(0, dlt_x, dlt_y, -dlt_z)
         Q = prp.Eular2Quaternion(
             psi=sim[prp.psi_rad],
             theta=sim[prp.pitch_rad],
