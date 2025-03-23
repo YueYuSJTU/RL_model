@@ -66,6 +66,7 @@ class TestTrackingTask(unittest.TestCase):
         oppo_x=3000,
         oppo_y=3000,
         oppo_alt=-500,
+        oppo_heading=0,
         heading_deg=0,
         roll_rad=0.0,
         pitch_rad=0.0,
@@ -82,7 +83,7 @@ class TestTrackingTask(unittest.TestCase):
 
         sim = self.modify_sim_to_state_(
             sim, task, time_terminal, self_x, self_y, self_alt, 
-            oppo_x, oppo_y, oppo_alt, heading_deg, roll_rad, pitch_rad,psi_rad,
+            oppo_x, oppo_y, oppo_alt, oppo_heading, heading_deg, roll_rad, pitch_rad,psi_rad,
             speed, v_north_fps, v_east_fps, v_down_fps
         )
         
@@ -102,6 +103,7 @@ class TestTrackingTask(unittest.TestCase):
         oppo_x=3000,
         oppo_y=3000,
         oppo_alt=-500,
+        oppo_heading=0,
         heading_deg=0,
         roll_rad=0.0,
         pitch_rad=0.0,
@@ -142,6 +144,7 @@ class TestTrackingTask(unittest.TestCase):
         sim[task.oppo_x_ft] = oppo_x
         sim[task.oppo_y_ft] = oppo_y
         sim[task.oppo_altitude_sl_ft] = oppo_alt
+        sim[task.oppo_heading_deg] = oppo_heading
         
         # 更新计算属性
         # task._update_custom_properties(sim)
@@ -286,6 +289,12 @@ class TestTrackingTask(unittest.TestCase):
             excepted_angle,
             sim[self.task.track_angle_rad],
             msg="跟踪角度计算不正确"
+        )
+        # print(f"Debug: oppo_x: {oppo_x}, oppo_y: {oppo_y}, oppo_alt: {oppo_alt}")
+        # print(f"Debug: oppo_heading: {sim[self.task.oppo_heading_deg]}, oppo_pitch: {sim[self.task.oppo_pitch_rad]}, oppo_roll: {sim[self.task.oppo_roll_rad]}")
+        self.assertAlmostEqual(
+            excepted_angle,
+            sim[self.task.adverse_angle_rad]
         )
 
 

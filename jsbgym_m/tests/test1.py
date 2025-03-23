@@ -1,6 +1,9 @@
+import os
 import sys
-sys.path.insert(0, "D:\Work_File\RL\jsbgym")
-
+current_file_path = os.path.abspath(__file__)
+parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 import jsbgym_m             # type: ignore
 import gymnasium as gym
 import numpy as np

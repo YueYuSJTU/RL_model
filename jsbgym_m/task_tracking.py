@@ -301,6 +301,12 @@ class TrackingTask(FlightTask):
     INITIAL_HEADING_DEG = 0
     THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
+    adverse_angle_rad = prp.BoundedProperty(
+        "target/adverse-angle", "adverse angle between the two aircraft [rad]", -math.pi, math.pi
+    )
+    closure_rate = prp.BoundedProperty(
+        "target/closure-rate", "closure rate between the two aircraft [ft/s]", -10000, 10000
+    )
 
     def __init__(
         self,
@@ -458,13 +464,22 @@ class TrackingTask(FlightTask):
         dlt_x, dlt_y, dlt_z = (own_position-oppo_position).get_xyz()
         sim[self.oppo_elevation_pointMass_rad] = math.atan2(dlt_z, math.sqrt(dlt_x**2+dlt_y**2))
         R = Quaternion(0, dlt_x, dlt_y, -dlt_z)
-        Q = Quaternion(axis=[0,0,1], radians=math.radians(oppo_state["heading_deg"]))
+        # Q = Quaternion(axis=[0,0,1], radians=math.radians(oppo_state["heading_deg"]))
+        Q = prp.Eular2Quaternion(
+            psi=math.radians(sim[self.oppo_heading_deg]),
+            theta=sim[self.oppo_pitch_rad],
+            phi=sim[self.oppo_roll_rad]
+        )
         Rb = Q.inverse * R * Q
         rbx, rby, rbz = Rb.vector
         sim[self.oppo_track_angle_rad] = prp.Vector3.cal_angle(
             prp.Vector3(rbx, rby, rbz),
             prp.Vector3(1, 0, 0)
         )
+        # sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
+        #     prp.Vector3(rbx, rby, rbz),
+        #     prp.Vector3(-1, 0, 0)
+        # )
 
         sim[self.oppo_bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
         sim[self.oppo_elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
@@ -485,7 +500,11 @@ class TrackingTask(FlightTask):
             sim[self.oppo_altitude_sl_ft]
         )
 
+        pre_distance = sim[self.distance_oppo_ft]
         sim[self.distance_oppo_ft] = (own_position-oppo_position).Norm()
+        time = 1 / self.step_frequency_hz
+        sim[self.closure_rate] = (pre_distance - sim[self.distance_oppo_ft]) / time
+        
         sim[self.bearing_pointMass_rad] = prp.Vector3.cal_angle(
             (oppo_position-own_position).project_to_plane("xy"), 
             prp.Vector3(x=1, y=0, z=0)
@@ -505,6 +524,19 @@ class TrackingTask(FlightTask):
         sim[self.track_angle_rad] = prp.Vector3.cal_angle(
             prp.Vector3(rbx, rby, rbz),
             prp.Vector3(1, 0, 0)
+        )
+
+        R_ = Quaternion(0, -dlt_x, -dlt_y, dlt_z)
+        Q_ = prp.Eular2Quaternion(
+            psi=math.radians(sim[self.oppo_heading_deg]),
+            theta=sim[self.oppo_pitch_rad],
+            phi=sim[self.oppo_roll_rad]
+        )
+        Rb_ = Q_.inverse * R_ * Q_
+        rbx_, rby_, rbz_ = Rb_.vector
+        sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
+            prp.Vector3(rbx_, rby_, rbz_),
+            prp.Vector3(-1, 0, 0)
         )
 
         sim[self.bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
