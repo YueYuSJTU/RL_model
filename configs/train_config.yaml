@@ -1,7 +1,7 @@
 # 训练通用配置
-agent: ppo_trans
-env: c172_trajectory_continue
-total_timesteps: 1000_000
+agent: ppo_1layer
+env: f16_tracking
+total_timesteps: 2000_000
 eval_freq: 10000
 log_root: "./experiments"
 seed: 42

@@ -3,9 +3,14 @@ import gymnasium as gym
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
 from src.utils.yaml_import import import_class
-
+import os
 import sys
-sys.path.insert(0, "D:\Work_File\RL\jsbgym")
+# 将项目根目录添加到sys.path（使用相对路径）
+current_file_path = os.path.abspath(__file__)
+RL_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_path))))  # RL目录
+env_dir = os.path.join(RL_dir, "jsbgym")
+# print(env_dir)
+sys.path.append(env_dir)
 import jsbgym_m             # type: ignore
 
 def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> DummyVecEnv:
