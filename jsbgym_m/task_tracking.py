@@ -173,6 +173,12 @@ class TrackingTask(FlightTask):
     #     -10000,
     #     10000,
     # )
+    adverse_angle_rad = prp.BoundedProperty(
+        "target/adverse-angle", "adverse angle between the two aircraft [rad]", -math.pi, math.pi
+    )
+    closure_rate = prp.BoundedProperty(
+        "target/closure-rate", "closure rate between the two aircraft [ft/s]", -10000, 10000
+    )
 
     # opponent aircraft state variables
     oppo_x_ft = BoundedProperty(
@@ -267,6 +273,9 @@ class TrackingTask(FlightTask):
         elevation_accountingRollPitch_rad,
         bearing_pointMass_rad,
         elevation_pointMass_rad,
+        # 为了reward计算必须加上这两个
+        adverse_angle_rad,
+        closure_rate,
     )
     # opponent aircraft state variables, must calculate in this file
     oppo_state_variables = (
@@ -301,12 +310,6 @@ class TrackingTask(FlightTask):
     INITIAL_HEADING_DEG = 0
     THROTTLE_CMD = 0.6
     MIXTURE_CMD = 0.8
-    adverse_angle_rad = prp.BoundedProperty(
-        "target/adverse-angle", "adverse angle between the two aircraft [rad]", -math.pi, math.pi
-    )
-    closure_rate = prp.BoundedProperty(
-        "target/closure-rate", "closure rate between the two aircraft [ft/s]", -10000, 10000
-    )
 
     def __init__(
         self,
@@ -356,15 +359,61 @@ class TrackingTask(FlightTask):
         :return: the assessor
         """
         base_components = (
-            rewards.ScaledAsymptoticErrorComponent(
-                name="test_base_component",
-                prop=self.distance_oppo_ft,
+            # rewards.ScaledAsymptoticErrorComponent(
+            #     name="test_base_component",
+            #     prop=self.distance_oppo_ft,
+            #     state_variables=self.state_variables,
+            #     target=0.0,
+            #     is_potential_based=False,
+            #     scaling_factor=1000,
+            #     cmp_scale=0.3,
+            # ),
+            rewards.UserDefinedComponent(
+                name = "relative_position",
+                func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
+                props=(self.track_angle_rad, self.adverse_angle_rad),
                 state_variables=self.state_variables,
-                target=0.0,
-                is_potential_based=False,
-                scaling_factor=1000,
-                cmp_scale=0.3,
+                cmp_scale=1.0
             ),
+            rewards.UserDefinedComponent(
+                name="closure_rate",
+                func=lambda closure, adverse, distance:
+                    closure/500 * (1-logistic(adverse/(math.pi),18,0.5)) * logistic(distance,1/500,2900),
+                props=(self.closure_rate, self.adverse_angle_rad, self.distance_oppo_ft),
+                state_variables=self.state_variables,
+                cmp_scale=1.0
+            ),
+            rewards.UserDefinedComponent(
+                name="gunsnap_blue",
+                func=lambda distance, track:
+                    GammaB(distance) * (1 - logistic(track/(math.pi), 1e5, 1/180)),
+                props=(self.distance_oppo_ft, self.track_angle_rad),
+                state_variables=self.state_variables,
+                cmp_scale=1.0
+            ),
+            rewards.UserDefinedComponent(
+                name="gunsnap_red",
+                func=lambda distance, adverse:
+                    -GammaR(distance) * logistic(adverse/(math.pi), 800, 178/180),
+                props=(self.distance_oppo_ft, self.adverse_angle_rad),
+                state_variables=self.state_variables,
+                cmp_scale=1.0
+            ),
+            rewards.UserDefinedComponent(
+                name="deck",
+                func=lambda h: -4 * (1-logistic(h, 1/20, 1300)),
+                props=(prp.altitude_sl_ft,),
+                state_variables=self.state_variables,
+                cmp_scale=1.0
+            ),
+            rewards.UserDefinedComponent(
+                name="too_close",
+                func=lambda adverse, distance:
+                    -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
+                props=(self.adverse_angle_rad, self.distance_oppo_ft),
+                state_variables=self.state_variables,
+                cmp_scale=1.0
+            )
         )
         shaping_components = ()
 
@@ -500,11 +549,14 @@ class TrackingTask(FlightTask):
             sim[self.oppo_altitude_sl_ft]
         )
 
-        pre_distance = sim[self.distance_oppo_ft]
+        if sim[self.steps_left] == self.steps_left.max:
+            pre_distance = (own_position-oppo_position).Norm()
+        else:
+            pre_distance = sim[self.distance_oppo_ft]
         sim[self.distance_oppo_ft] = (own_position-oppo_position).Norm()
         time = 1 / self.step_frequency_hz
         sim[self.closure_rate] = (pre_distance - sim[self.distance_oppo_ft]) / time
-        
+
         sim[self.bearing_pointMass_rad] = prp.Vector3.cal_angle(
             (oppo_position-own_position).project_to_plane("xy"), 
             prp.Vector3(x=1, y=0, z=0)
@@ -580,3 +632,31 @@ class TrackingTask(FlightTask):
             self.elevation_pointMass_rad,
             self.steps_left,
         )
+
+
+def logistic(x, alpha, x0):
+    arg = alpha * (x - x0)
+    if arg > 700:  # exp(700)接近浮点上限
+        return 1.0
+    elif arg < -700:
+        return 0.0
+    else:
+        return 1.0 / (1.0 + math.exp(-arg))
+
+def GammaB(distance):
+    if distance < 1950:
+        return betaB(distance) * logistic(distance, 1/50, 1000)
+    else:
+        return betaB(distance) * (1 - logistic(distance, 1/50, 2900))
+
+def betaB(distance):
+    return 3
+
+def GammaR(distance):
+    if distance < 2250:
+        return betaR(distance) * logistic(distance, 1/35, 400)
+    else:
+        return betaR(distance) * (1 - logistic(distance, 1/200, 4100))
+
+def betaR(distance):
+    return -3

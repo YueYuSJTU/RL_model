@@ -58,6 +58,48 @@ class RewardComponent(ABC):
     @abstractmethod
     def is_potential_difference_based(self) -> bool: ...
 
+class UserDefinedComponent(RewardComponent):
+    """
+    pass in a function that calculates the reward
+    """
+
+    def __init__(
+        self,
+        name: str,
+        func,
+        props: Tuple[prp.BoundedProperty],
+        state_variables: Tuple[prp.BoundedProperty],
+        cmp_scale: float = 1.0,
+    ):
+        """
+        Constructor.
+        
+        :param name: the uniquely identifying name of this component
+        :param func: the function that calculates the reward
+        """
+        self.name = name
+        self.is_potential_based = False
+        self.func = func
+        # print(f"Debug: props: {props}, state_variables: {state_variables}")
+        self.state_index_of_values = [state_variables.index(prop) for prop in props]
+        self.cmp_scale = cmp_scale
+    
+    def get_name(self) -> str:
+        return self.name
+
+    def is_potential_difference_based(self) -> bool:
+        return self.is_potential_based
+    
+    def get_potential(self, state, is_terminal = False) -> list[float]:
+        return self.func(*[state[i] for i in self.state_index_of_values])
+    
+    def calculate(self, state: State, prev_state: State, is_terminal: bool):
+        """
+
+        """
+        reward = self.get_potential(state, is_terminal)
+        return reward * self.cmp_scale
+
 class SmoothingComponent(RewardComponent):
     """
     A reward component which gives a reward from [0, 1]
