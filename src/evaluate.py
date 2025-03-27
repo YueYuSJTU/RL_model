@@ -34,14 +34,20 @@ def evaluate(exp_path: str, render_mode: str = "human"):
     )
 
     # 运行演示
+    total_reward = 0
     obs = vec_env.reset()
     for i in range(15000):
+        if render_mode is not None:
+            vec_env.render()
         action, _ = model.predict(obs, deterministic=True)
-        obs, _, terminated, _ = vec_env.step(action)
+        obs, reward, terminated, _ = vec_env.step(action)
+        total_reward += reward
         # print(f"step{i}, obs: {obs}, action: {action}")
         if terminated:
+            print(f"Episode terminated at step {i}, total reward: {total_reward}")
             break
 
 if __name__ == "__main__":
     # 示例使用：evaluate("./experiments/20240320_ppo_baseline", "human")
-    evaluate("./experiments/last_train", "human")
+    # evaluate("./experiments/last_train", "human")
+    evaluate("./experiments/last_train", "flightgear")

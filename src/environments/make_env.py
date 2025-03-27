@@ -2,6 +2,7 @@ from typing import Optional, List, Tuple, Callable
 import gymnasium as gym
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.env_util import make_vec_env
 from src.utils.yaml_import import import_class
 import os
 import sys
@@ -28,10 +29,24 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
     
     if training:
         # 创建训练环境
-        vec_env = SubprocVecEnv([make_Env(env_id, i, wrappers=wrappers) for i in range(num_cpu)])
+        # vec_env = SubprocVecEnv([make_Env(env_id, i, wrappers=wrappers) for i in range(num_cpu)])
+        vec_env = make_vec_env(
+            env_id, 
+            n_envs=num_cpu, 
+            wrapper_kwargs={"wrappers": wrappers}, 
+            vec_env_cls=SubprocVecEnv, 
+            env_kwargs={"render_mode": render_mode}
+        )
     else:
         # 创建评估环境
-        vec_env = DummyVecEnv([make_Env(env_id, 0, render_mode=render_mode, wrappers=wrappers)])
+        # vec_env = DummyVecEnv([make_Env(env_id, 0, render_mode=render_mode, wrappers=wrappers)])
+        vec_env = make_vec_env(
+            env_id, 
+            n_envs=1, 
+            wrapper_kwargs={"wrappers": wrappers}, 
+            vec_env_cls=DummyVecEnv,
+            env_kwargs={"render_mode": render_mode}
+        )
 
     # 标准化处理
     if env_config.get("use_vec_normalize", False):
