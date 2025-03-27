@@ -407,6 +407,7 @@ class FlightGearVisualiser(object):
     PROTOCOL = "udp"
     LOADED_MESSAGE = "loading cities done"
     LOADED_MESSAGE1 = "Starting hard-coded terrain presampling"
+    LOADED_MESSAGE2 = "PNG lib warning : Malformed iTXt chunk"
     FLIGHTGEAR_TIME_FACTOR = 1  # sim speed relative to realtime, higher is faster
 
     def __init__(
@@ -481,7 +482,7 @@ class FlightGearVisualiser(object):
     def _block_until_flightgear_loaded(self):
         while True:
             msg_out = self.flightgear_process.stdout.readline().decode()
-            if self.LOADED_MESSAGE in msg_out or self.LOADED_MESSAGE1 in msg_out:
+            if self.LOADED_MESSAGE in msg_out or self.LOADED_MESSAGE1 in msg_out or self.LOADED_MESSAGE2 in msg_out:
                 time.sleep(5)
                 print("FlightGear Loading Complete")
                 break

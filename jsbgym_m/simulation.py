@@ -4,7 +4,7 @@ import time
 from mpl_toolkits.mplot3d import Axes3D  # required for 3d plotting
 from typing import Dict, Union
 import jsbgym_m.properties as prp
-from jsbgym_m.aircraft import Aircraft, c172
+from jsbgym_m.aircraft import Aircraft, c172, f16
 
 
 class Simulation(object):
@@ -239,6 +239,26 @@ class Simulation(object):
         """
         self[prp.throttle_cmd] = throttle_cmd
         self[prp.mixture_cmd] = mixture_cmd
+        # print("Setting throttle and mixture to", throttle_cmd, mixture_cmd)
+
+        # if self.aircraft == f16:
+        #     while self.run():
+        #         if self[prp.sim_time_s] >= 0.25:
+        #             self[prp.starter_cmd] = 1
+                
+        #         if self[prp.f16_engine_n2] >= 15:
+        #             self[prp.cutoff_cmd] = 0
+        #             self[prp.throttle_cmd] = throttle_cmd
+        #             break
+
+        #         if self[prp.sim_time_s] >= 2.0:
+        #             print("Engine start failed")
+        #             break
+        propulsion = self.jsbsim.get_propulsion()
+        n = propulsion.get_num_engines()
+        for i in range(n):
+            propulsion.get_engine(i).init_running()
+        # print(propulsion)
 
         try:
             self[prp.throttle_1_cmd] = throttle_cmd

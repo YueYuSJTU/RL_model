@@ -200,7 +200,11 @@ class TrajectoryTask(FlightTask):
         prp.altitude_sl_ft.min,
         prp.altitude_sl_ft.max,
     )
-    action_variables = (prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd)
+    action_variables = (
+        prp.aileron_cmd, 
+        prp.elevator_cmd, 
+        prp.rudder_cmd,
+    )
 
     def __init__(
         self,

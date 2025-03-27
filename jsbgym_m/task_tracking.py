@@ -79,7 +79,8 @@ class Opponent(object):
         """
         x = np.random.uniform(-6000, -4000) if random.random() < 0.5 else np.random.uniform(4000, 6000)
         y = np.random.uniform(-6000, -4000) if random.random() < 0.5 else np.random.uniform(4000, 6000)
-        h = np.random.uniform(-400, -700)
+        # h = np.random.uniform(-400, -700)
+        h = -500
         return (x, y, h)
     
     def _randomly_choose_init_dirction(self):
@@ -359,15 +360,15 @@ class TrackingTask(FlightTask):
         :return: the assessor
         """
         base_components = (
-            # rewards.ScaledAsymptoticErrorComponent(
-            #     name="test_base_component",
-            #     prop=self.distance_oppo_ft,
-            #     state_variables=self.state_variables,
-            #     target=0.0,
-            #     is_potential_based=False,
-            #     scaling_factor=1000,
-            #     cmp_scale=0.3,
-            # ),
+            rewards.ScaledAsymptoticErrorComponent(
+                name="force_altitude_4500",
+                prop=prp.altitude_sl_ft,
+                state_variables=self.state_variables,
+                target=4500,
+                is_potential_based=False,
+                scaling_factor=500,
+                cmp_scale=1.2,
+            ),
             rewards.UserDefinedComponent(
                 name = "relative_position",
                 func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
@@ -406,15 +407,22 @@ class TrackingTask(FlightTask):
                 state_variables=self.state_variables,
                 cmp_scale=1.0
             ),
-            rewards.UserDefinedComponent(
-                name="too_close",
-                func=lambda adverse, distance:
-                    -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
-                props=(self.adverse_angle_rad, self.distance_oppo_ft),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            )
+            # rewards.UserDefinedComponent(
+            #     name="too_close",
+            #     func=lambda adverse, distance:
+            #         -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
+            #     props=(self.adverse_angle_rad, self.distance_oppo_ft),
+            #     state_variables=self.state_variables,
+            #     cmp_scale=1.0
+            # )
         )
+        # shaping_components = (rewards.SmoothingComponent(
+        #         name="action_penalty",
+        #         props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd, prp.throttle_cmd],
+        #         state_variables=self.action_variables,
+        #         is_potential_based=True,
+        #         cmp_scale=0.3,
+        #     ),)
         shaping_components = ()
 
         if shaping_type is Shaping.STANDARD:
@@ -440,6 +448,7 @@ class TrackingTask(FlightTask):
         return {**self.base_initial_conditions, **extra_conditions}
 
     def _update_custom_properties(self, sim: Simulation) -> None:
+        print(f"Debug: {sim[prp.elevator_cmd]}, {sim[prp.elevator]}")
         self._cal_self_position(sim)
         self._cal_oppo_state(sim)
         self._update_extra_properties(sim)
@@ -626,6 +635,8 @@ class TrackingTask(FlightTask):
             prp.altitude_sl_ft,
             self.distance_oppo_ft,
             self.track_angle_rad,
+            self.adverse_angle_rad,
+            self.closure_rate,
             self.bearing_accountingRollPitch_rad,
             self.elevation_accountingRollPitch_rad,
             self.bearing_pointMass_rad,

@@ -33,7 +33,7 @@ class JsbSimEnv(gym.Env):
         self,
         aircraft: Aircraft = c172,
         task_type: Type = HeadingControlTask,
-        agent_interaction_freq: int = 5,
+        agent_interaction_freq: int = 10,
         shaping: Shaping = Shaping.STANDARD,
         render_mode: Optional[str] = None,
     ):

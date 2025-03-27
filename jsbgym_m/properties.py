@@ -175,6 +175,11 @@ left_dht_rad = BoundedProperty(
 right_dht_rad = BoundedProperty(
     "fcs/dht-right-pos-rad", "right differential horizontal tail angle [rad]", -math.pi, math.pi
 )
+f16_engine_n2 = BoundedProperty(
+    "propulsion/engine[0]/n2", "F16 engine N2 speed [rpm]", 0, 100000
+)
+starter_cmd = Property("propulsion/starter-cmd", "F16 engine starter command, bool")
+cutoff_cmd = Property("propulsion/cutoff-cmd", "F16 engine cutoff command, bool")
 
 # simulation
 sim_dt = Property("simulation/dt", "JSBSim simulation timestep [s]")
