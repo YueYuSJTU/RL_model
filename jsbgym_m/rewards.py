@@ -128,6 +128,7 @@ class SmoothingComponent(RewardComponent):
         assert is_potential_based, "potential_difference_based must be True"
         self.name = name
         self.is_potential_based = True
+        # print(f"Debug: props: {props}, state_variables: {state_variables}")
         self.state_index_of_values = [state_variables.index(prop) for prop in props]
         self.scaling_factor = scaling_factor
         self.cmp_scale = cmp_scale

@@ -448,7 +448,6 @@ class TrackingTask(FlightTask):
         return {**self.base_initial_conditions, **extra_conditions}
 
     def _update_custom_properties(self, sim: Simulation) -> None:
-        print(f"Debug: {sim[prp.elevator_cmd]}, {sim[prp.elevator]}")
         self._cal_self_position(sim)
         self._cal_oppo_state(sim)
         self._update_extra_properties(sim)
