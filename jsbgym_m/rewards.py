@@ -1,3 +1,4 @@
+import numpy as np
 import jsbgym_m.properties as prp
 from abc import ABC, abstractmethod
 from typing import Tuple, Union
@@ -21,6 +22,7 @@ class Reward(object):
     def __init__(self, base_reward_elements: Tuple, shaping_reward_elements: Tuple):
         self.base_reward_elements = base_reward_elements
         self.shaping_reward_elements = shaping_reward_elements
+        self.additional_reward = 0.0        # 环境中止时的奖励附加项
         if not self.base_reward_elements:
             raise ValueError("base agent_reward cannot be empty")
 
@@ -31,7 +33,7 @@ class Reward(object):
             self.shaping_reward_elements
         )
         # return sum_reward / num_reward_components
-        return sum_reward
+        return sum_reward + self.additional_reward
 
     def assessment_reward(self) -> float:
         """Returns scalar non-shaping reward by taking mean of base reward elements."""
@@ -39,6 +41,12 @@ class Reward(object):
 
     def is_shaping(self):
         return bool(self.shaping_reward_elements)
+    
+    def set_additional_reward(self, additional_reward: float):
+        """
+        Set the additional reward when the environment is terminated.
+        """
+        self.additional_reward = additional_reward
 
 
 class RewardComponent(ABC):
@@ -112,8 +120,9 @@ class SmoothingComponent(RewardComponent):
         name: str,
         props: Tuple[prp.BoundedProperty],
         state_variables: Tuple[prp.BoundedProperty],
+        list_length: int,
         is_potential_based: bool,
-        scaling_factor: Union[float, int] = 1.0,
+        # scaling_factor: Union[float, int] = 1.0,
         cmp_scale: float = 1.0,
     ):
         """
@@ -129,9 +138,12 @@ class SmoothingComponent(RewardComponent):
         self.name = name
         self.is_potential_based = True
         # print(f"Debug: props: {props}, state_variables: {state_variables}")
+        self.max_value = [prop.max for prop in props]
         self.state_index_of_values = [state_variables.index(prop) for prop in props]
-        self.scaling_factor = scaling_factor
+        # self.scaling_factor = scaling_factor
         self.cmp_scale = cmp_scale
+        self.state_list = []
+        self.list_length = list_length
     
     def get_name(self) -> str:
         return self.name
@@ -140,21 +152,29 @@ class SmoothingComponent(RewardComponent):
         return self.is_potential_based
     
     def get_potential(self, state, is_terminal) -> list[float]:
-        # value = state[self.state_index_of_values]
-        value = [state[i]/self.scaling_factor for i in self.state_index_of_values]
+        if len(self.state_list) == 1:
+            # 这里考虑是不是能够只取最大值
+            # value = [1.0 for _ in range(len(self.state_index_of_values))]
+            value = 0.0
+        else:
+            state_list = np.array(self.state_list)
+            value = state_list[1:] - state_list[:-1]
+            value = sum(abs(value)) / len(value)
+            value = -1 * max(value / np.array(self.max_value))
         return value
     
     def calculate(self, state: State, prev_state: State, is_terminal: bool):
         """
 
         """
-        now_value = self.get_potential(state, is_terminal)
-        prev_value = self.get_potential(prev_state, False)
-        reward = [abs(now_value[i] - prev_value[i]) for i in range(len(now_value))]
-        # reward = sum(reward) / len(reward)
-        reward = max(reward)
-        # reward = normalise_error_asymptotic(reward, scaling_factor=0.1)
-        reward = 1 - normalise_error_linear(reward, max_error=2)
+        self.state_list.append([state[i] for i in self.state_index_of_values])
+        if len(self.state_list) > self.list_length:
+            self.state_list.pop(0)
+        reward = self.get_potential(state, is_terminal)
+
+        if is_terminal:
+            self.state_list = []
+
         return reward * self.cmp_scale
 
 class NormalisedComponent(RewardComponent, ABC):

@@ -125,10 +125,10 @@ class TrajectoryTask(FlightTask):
     TARGET_xPOSITION_FT = 3000
     TARGET_yPOSITION_FT = 5000
     TARGET_zPOSITION_FT = 200
-    THROTTLE_CMD = 0.7
+    THROTTLE_CMD = 0.4
     MIXTURE_CMD = 0.8
     INITIAL_HEADING_DEG = 270
-    DEFAULT_EPISODE_TIME_S = 90.0
+    DEFAULT_EPISODE_TIME_S = 60.0
     ALTITUDE_SCALING_FT = 100
     X_POSITION_SCALING_MT = 2500
     Y_POSITION_SCALING_MT = 4000
@@ -136,7 +136,7 @@ class TrajectoryTask(FlightTask):
     ROLL_ERROR_SCALING_RAD = 0.15  # approx. 8 deg
     SIDESLIP_ERROR_SCALING_DEG = 3.0
     VERTICAL_SPEED_SCALING_FPS = 1
-    MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
+    MIN_STATE_QUALITY = -10.0  # terminate if state 'quality' is less than this
     MAX_ALTITUDE_DEVIATION_FT = 3000  # terminate if altitude error exceeds this
     NAVIGATION_TOLERANCE = 500       # terminate if relative error is less than this
     enu_Xposition_ft = BoundedProperty(
@@ -357,7 +357,8 @@ class TrajectoryTask(FlightTask):
                 props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
                 state_variables=self.state_variables,
                 is_potential_based=True,
-                cmp_scale=0.3,
+                list_length=10,
+                cmp_scale=1.0,
             )
             # potential_based_components = (wings_level, no_sideslip)
             potential_based_components = (action_penalty,)

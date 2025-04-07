@@ -296,7 +296,7 @@ class FigureVisualiser(object):
             for i in range(len(targetlats)):
                 targetlats[i] = targetlats[i] + lats[0]
                 targetlongs[i] = targetlongs[i] + longs[0]
-                targetalts[i] = targetalts[i] + alts[0]
+                targetalts[i] = targetalts[i]
             ax.plot(targetlats, targetlongs, targetalts, label='Target')
             ax.scatter(targetlats[0], targetlongs[0], targetalts[0], color='r')
             ax.scatter(targetlats[-1], targetlongs[-1], targetalts[-1], color='b')

@@ -109,7 +109,7 @@ class FlyTask(FlightTask):
                 name="smooth altitude",
                 props=[prp.altitude_sl_ft],
                 state_variables=self.state_variables,
-                scaling_factor=self.ALTITUDE_SCALING_FT,
+                list_length=10,
                 is_potential_based=True,
             ),
             # rewards.SmoothingComponent(

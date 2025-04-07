@@ -80,7 +80,7 @@ class Opponent(object):
         x = np.random.uniform(-6000, -4000) if random.random() < 0.5 else np.random.uniform(4000, 6000)
         y = np.random.uniform(-6000, -4000) if random.random() < 0.5 else np.random.uniform(4000, 6000)
         # h = np.random.uniform(-400, -700)
-        h = -500
+        h = 6000
         return (x, y, h)
     
     def _randomly_choose_init_dirction(self):
@@ -309,8 +309,15 @@ class TrackingTask(FlightTask):
     # other variables
     DEFAULT_EPISODE_TIME_S = 60.0
     INITIAL_HEADING_DEG = 0
-    THROTTLE_CMD = 0.6
+    THROTTLE_CMD = 0.4
     MIXTURE_CMD = 0.8
+    HP = 5
+    aircraft_HP = prp.BoundedProperty(
+        "aircraft/aircraft_HP", "aircraft HP", 0, HP
+    )
+    opponent_HP = prp.BoundedProperty(
+        "opponent/opponent_HP", "opponent HP", 0, HP
+    )
 
     def __init__(
         self,
@@ -339,6 +346,7 @@ class TrackingTask(FlightTask):
             + self.tracking_state_variables
             + self.extra_state_variables
             + self.oppo_state_variables
+            + self.action_variables
         )
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
@@ -360,15 +368,15 @@ class TrackingTask(FlightTask):
         :return: the assessor
         """
         base_components = (
-            rewards.ScaledAsymptoticErrorComponent(
-                name="force_altitude_4500",
-                prop=prp.altitude_sl_ft,
-                state_variables=self.state_variables,
-                target=4500,
-                is_potential_based=False,
-                scaling_factor=500,
-                cmp_scale=1.2,
-            ),
+            # rewards.ScaledAsymptoticErrorComponent(
+            #     name="force_altitude_4500",
+            #     prop=prp.altitude_sl_ft,
+            #     state_variables=self.state_variables,
+            #     target=4500,
+            #     is_potential_based=False,
+            #     scaling_factor=500,
+            #     cmp_scale=1.2,
+            # ),
             rewards.UserDefinedComponent(
                 name = "relative_position",
                 func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
@@ -407,25 +415,41 @@ class TrackingTask(FlightTask):
                 state_variables=self.state_variables,
                 cmp_scale=1.0
             ),
-            # rewards.UserDefinedComponent(
-            #     name="too_close",
-            #     func=lambda adverse, distance:
-            #         -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
-            #     props=(self.adverse_angle_rad, self.distance_oppo_ft),
-            #     state_variables=self.state_variables,
-            #     cmp_scale=1.0
-            # )
+            rewards.UserDefinedComponent(
+                name="too_close",
+                func=lambda adverse, distance:
+                    -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
+                props=(self.adverse_angle_rad, self.distance_oppo_ft),
+                state_variables=self.state_variables,
+                cmp_scale=1.0
+            )
         )
-        # shaping_components = (rewards.SmoothingComponent(
-        #         name="action_penalty",
-        #         props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd, prp.throttle_cmd],
-        #         state_variables=self.action_variables,
-        #         is_potential_based=True,
-        #         cmp_scale=0.3,
-        #     ),)
         shaping_components = ()
 
         if shaping_type is Shaping.STANDARD:
+            return assessors.AssessorImpl(
+                base_components,
+                shaping_components,
+                positive_rewards=self.positive_rewards,
+            )
+        elif shaping_type is Shaping.EXTRA:
+            shaping_components = (rewards.SmoothingComponent(
+                    name="action_penalty",
+                    props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
+                    state_variables=self.state_variables,
+                    is_potential_based=True,
+                    list_length=10,
+                    cmp_scale=4.0,
+                ),
+                rewards.SmoothingComponent(
+                    name="throttle_penalty",
+                    props=[prp.throttle_cmd],
+                    state_variables=self.action_variables,
+                    is_potential_based=True,
+                    list_length=20,
+                    cmp_scale=6.0,
+                ),
+                )
             return assessors.AssessorImpl(
                 base_components,
                 shaping_components,
@@ -451,6 +475,7 @@ class TrackingTask(FlightTask):
         self._cal_self_position(sim)
         self._cal_oppo_state(sim)
         self._update_extra_properties(sim)
+        self._update_HP(sim)
         self._update_steps_left(sim)
 
     def _cal_self_position(self, sim: Simulation) -> None:
@@ -602,18 +627,53 @@ class TrackingTask(FlightTask):
         sim[self.bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
         sim[self.elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
 
+
+    def _update_HP(self, sim: Simulation) -> None:
+        """
+        Update the HP of the aircraft and opponent aircraft.
+        """
+        # update opponent HP
+        if sim[self.track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
+            damage = (3000 - sim[self.distance_oppo_ft]) / 2500 / self.step_frequency_hz
+            if sim[self.opponent_HP] > 0:
+                sim[self.opponent_HP] -= damage
+            else:
+                sim[self.opponent_HP] = 0
+        if sim[self.oppo_altitude_sl_ft] <= 1:
+            sim[self.opponent_HP] = 0
+
+        # update self HP
+        if sim[self.oppo_track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
+            damage = (3000 - sim[self.distance_oppo_ft]) / 2500 / self.step_frequency_hz
+            if sim[self.aircraft_HP] > 0:
+                sim[self.aircraft_HP] -= damage
+            else:
+                sim[self.aircraft_HP] = 0
+        # if sim[prp.altitude_sl_ft] <= 1:
+        #     sim[self.aircraft_HP] = 0
+        
+
     def _update_steps_left(self, sim: Simulation):
         sim[self.steps_left] -= 1
 
     def _is_terminal(self, sim: Simulation) -> bool:
         # terminate when time >= max, but use math.isclose() for float equality test
         terminal_step = sim[self.steps_left] <= 0
-        # TODO: issues if sequential?
-        return terminal_step
+        HP_is_zero = self._is_hp_zero(sim)
+        return terminal_step or HP_is_zero
+    
+    def _is_hp_zero(self, sim: Simulation) -> bool:
+        # print(f"self HP: {sim[self.aircraft_HP]}, opponent HP: {sim[self.opponent_HP]}")
+        return sim[self.aircraft_HP] <= 0 or sim[self.opponent_HP] <= 0
     
     def _reward_terminal_override(
         self, reward: rewards.Reward, sim: Simulation
     ) -> rewards.Reward:
+        add_reward = (self.HP - sim[self.opponent_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
+        if sim[self.aircraft_HP] <= 0:
+            add_reward -= sim[self.steps_left] #/ self.steps_left.max
+        reward.set_additional_reward(add_reward)
+        # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward
 
     def _new_episode_init(self, sim: Simulation) -> None:
@@ -625,6 +685,8 @@ class TrackingTask(FlightTask):
                                    sim[prp.ecef_z_ft]]
         lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
         self.coordinate_transform.setNEDorigin(*lla_position)
+        sim[self.aircraft_HP] = self.HP
+        sim[self.opponent_HP] = self.HP
 
         self.opponent.reset()
 
