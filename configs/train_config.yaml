@@ -1,8 +1,8 @@
 # 训练通用配置
 agent: ppo_1layer
 env: f16_tracking
-total_timesteps: 100000_000
-eval_freq: 50000
+total_timesteps: 55000_000
+eval_freq: 20000
 log_root: "./experiments"
 seed: 42
 num_cpu: 8

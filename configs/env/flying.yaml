@@ -1,7 +1,7 @@
 # 环境配置
 plane: "F16"
-task: "TrackingTask"
-shape: "Shaping.EXTRA"
+task: "FlyTask"
+shape: "Shaping.STANDARD"
 render_mode: null  # 训练时关闭渲染
 use_vec_normalize: True
 norm_obs: True

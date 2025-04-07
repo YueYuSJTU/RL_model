@@ -46,8 +46,10 @@ def evaluate(exp_path: str, render_mode: str = "human"):
         if terminated:
             print(f"Episode terminated at step {i}, total reward: {total_reward}")
             break
+    vec_env.close()
 
 if __name__ == "__main__":
     # 示例使用：evaluate("./experiments/20240320_ppo_baseline", "human")
-    # evaluate("./experiments/last_train", "human")
-    evaluate("./experiments/last_train", "flightgear")
+    evaluate("./experiments/last_train", "human")
+    # evaluate("./experiments/last_train", "flightgear")
+    # evaluate("./experiments/20250403_235256_ppo_1layer_TrackingTask", "flightgear")
