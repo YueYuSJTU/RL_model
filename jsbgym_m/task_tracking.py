@@ -368,15 +368,6 @@ class TrackingTask(FlightTask):
         :return: the assessor
         """
         base_components = (
-            # rewards.ScaledAsymptoticErrorComponent(
-            #     name="force_altitude_4500",
-            #     prop=prp.altitude_sl_ft,
-            #     state_variables=self.state_variables,
-            #     target=4500,
-            #     is_potential_based=False,
-            #     scaling_factor=500,
-            #     cmp_scale=1.2,
-            # ),
             rewards.UserDefinedComponent(
                 name = "relative_position",
                 func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
@@ -415,14 +406,44 @@ class TrackingTask(FlightTask):
                 state_variables=self.state_variables,
                 cmp_scale=1.0
             ),
-            rewards.UserDefinedComponent(
-                name="too_close",
-                func=lambda adverse, distance:
-                    -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
-                props=(self.adverse_angle_rad, self.distance_oppo_ft),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            )
+            # rewards.UserDefinedComponent(
+            #     name="too_close",
+            #     func=lambda adverse, distance:
+            #         -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
+            #     props=(self.adverse_angle_rad, self.distance_oppo_ft),
+            #     state_variables=self.state_variables,
+            #     cmp_scale=1.0
+            # )
+
+
+            ##############################################################################################################
+            # rewards.ScaledAsymptoticErrorComponent(
+            #     name="small_action",
+            #     prop=prp.aileron_cmd,
+            #     state_variables=self.state_variables,
+            #     is_potential_based=False,
+            #     target=0.0,
+            #     scaling_factor=0.5,
+            #     cmp_scale=4.0,
+            # ),
+            # rewards.ScaledAsymptoticErrorComponent(
+            #     name="small_thrust",
+            #     prop=prp.throttle_cmd,
+            #     state_variables=self.state_variables,
+            #     is_potential_based=False,
+            #     target=0.4,
+            #     scaling_factor=0.05,
+            #     cmp_scale=8.0,
+            # ),
+            # rewards.ScaledAsymptoticErrorComponent(
+            #     name="small_roll",
+            #     prop=prp.roll_rad,
+            #     state_variables=self.state_variables,
+            #     is_potential_based=False,
+            #     target=0.0,
+            #     scaling_factor=0.5,
+            #     cmp_scale=4.0,
+            # )
         )
         shaping_components = ()
 
@@ -441,14 +462,22 @@ class TrackingTask(FlightTask):
                     list_length=10,
                     cmp_scale=4.0,
                 ),
+                # rewards.SmoothingComponent(
+                #     name="throttle_penalty",
+                #     props=[prp.throttle_cmd],
+                #     state_variables=self.action_variables,
+                #     is_potential_based=True,
+                #     list_length=20,
+                #     cmp_scale=4.0,
+                # ),
                 rewards.SmoothingComponent(
-                    name="throttle_penalty",
-                    props=[prp.throttle_cmd],
-                    state_variables=self.action_variables,
+                    name="altitude_contain",
+                    props=[prp.altitude_sl_ft],
+                    state_variables=self.state_variables,
                     is_potential_based=True,
                     list_length=20,
-                    cmp_scale=6.0,
-                ),
+                    cmp_scale=80000.0,
+                )
                 )
             return assessors.AssessorImpl(
                 base_components,

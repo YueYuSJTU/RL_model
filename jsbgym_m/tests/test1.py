@@ -20,10 +20,10 @@ task = "TrackingTask"
 # shape = "Shaping.STANDARD"
 shape = "Shaping.EXTRA"
 
-# render_mode = "flightgear"
+render_mode = "flightgear"
 # render_mode = None
 # render_mode = "graph"
-render_mode = "human"
+# render_mode = "human"
 
 
 ENV_ID = f"{plane}-{task}-{shape}-FG-v0" if render_mode == "flightgear" else f"{plane}-{task}-{shape}-NoFG-v0"
