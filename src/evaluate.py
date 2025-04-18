@@ -52,4 +52,4 @@ if __name__ == "__main__":
     # 示例使用：evaluate("./experiments/20240320_ppo_baseline", "human")
     evaluate("./experiments/last_train", "human")
     # evaluate("./experiments/last_train", "flightgear")
-    # evaluate("./experiments/20250403_235256_ppo_1layer_TrackingTask", "flightgear")
+    # evaluate("./experiments/20250416_192206_ppo_1layer_TrackingTask", "human")
