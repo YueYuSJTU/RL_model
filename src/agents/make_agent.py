@@ -19,3 +19,18 @@ def creat_agent(env, agent_class: str, tensorboard_log: str, agent_cfg):
     )
 
     return model
+
+def load_agent(env, agent_class: str, path: str, device: str):
+    """加载PPO代理"""
+    if "ppo" in agent_class.lower():
+        model_class = PPO
+    else:
+        raise ValueError(f"Unknown agent class: {agent_class}")
+    
+    model = model_class.load(
+        path,
+        env=env,
+        device=device
+    )
+
+    return model

@@ -1,11 +1,12 @@
 import os
 import yaml
-from utils.yaml_import import add_path
-add_path()
+if __name__ == "__main__":
+    from utils.yaml_import import add_path
+    add_path()
 from typing import Dict
 from stable_baselines3 import PPO
-from environments.make_env import create_env
-from utils.serialization import load_config
+from src.environments.make_env import create_env
+from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 def evaluate(exp_path: str, render_mode: str = "human"):
