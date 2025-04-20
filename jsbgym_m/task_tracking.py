@@ -367,125 +367,126 @@ class TrackingTask(FlightTask):
         :param shaping_type: the type of shaping to use
         :return: the assessor
         """
-        base_components = (
-            rewards.UserDefinedComponent(
-                name = "relative_position",
-                func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
-                props=(self.track_angle_rad, self.adverse_angle_rad),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            ),
-            rewards.UserDefinedComponent(
-                name="closure_rate",
-                func=lambda closure, adverse, distance:
-                    closure/500 * (1-logistic(adverse/(math.pi),18,0.5)) * logistic(distance,1/500,2900),
-                props=(self.closure_rate, self.adverse_angle_rad, self.distance_oppo_ft),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            ),
-            rewards.UserDefinedComponent(
-                name="gunsnap_blue",
-                func=lambda distance, track:
-                    GammaB(distance) * (1 - logistic(track/(math.pi), 1e5, 1/180)),
-                props=(self.distance_oppo_ft, self.track_angle_rad),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            ),
-            rewards.UserDefinedComponent(
-                name="gunsnap_red",
-                func=lambda distance, adverse:
-                    -GammaR(distance) * logistic(adverse/(math.pi), 800, 178/180),
-                props=(self.distance_oppo_ft, self.adverse_angle_rad),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            ),
-            rewards.UserDefinedComponent(
-                name="deck",
-                func=lambda h: -4 * (1-logistic(h, 1/20, 1300)),
-                props=(prp.altitude_sl_ft,),
-                state_variables=self.state_variables,
-                cmp_scale=1.0
-            ),
-            # rewards.UserDefinedComponent(
-            #     name="too_close",
-            #     func=lambda adverse, distance:
-            #         -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
-            #     props=(self.adverse_angle_rad, self.distance_oppo_ft),
-            #     state_variables=self.state_variables,
-            #     cmp_scale=1.0
-            # )
+        if Shaping.is_stage_type(shaping_type):
+            stage_number = int(shaping_type[5:])  # 提取数字部分
+            base_components = ()
+            shaping_components = ()
 
-
-            ##############################################################################################################
-            # rewards.ScaledAsymptoticErrorComponent(
-            #     name="small_action",
-            #     prop=prp.aileron_cmd,
-            #     state_variables=self.state_variables,
-            #     is_potential_based=False,
-            #     target=0.0,
-            #     scaling_factor=0.5,
-            #     cmp_scale=4.0,
-            # ),
-            # rewards.ScaledAsymptoticErrorComponent(
-            #     name="small_thrust",
-            #     prop=prp.throttle_cmd,
-            #     state_variables=self.state_variables,
-            #     is_potential_based=False,
-            #     target=0.4,
-            #     scaling_factor=0.05,
-            #     cmp_scale=8.0,
-            # ),
-            # rewards.ScaledAsymptoticErrorComponent(
-            #     name="small_roll",
-            #     prop=prp.roll_rad,
-            #     state_variables=self.state_variables,
-            #     is_potential_based=False,
-            #     target=0.0,
-            #     scaling_factor=0.5,
-            #     cmp_scale=4.0,
-            # )
-        )
-        shaping_components = ()
-
-        if shaping_type is Shaping.STANDARD:
-            return assessors.AssessorImpl(
-                base_components,
-                shaping_components,
-                positive_rewards=self.positive_rewards,
-            )
-        elif shaping_type is Shaping.EXTRA:
-            shaping_components = (rewards.SmoothingComponent(
-                    name="action_penalty",
-                    props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                    state_variables=self.state_variables,
-                    is_potential_based=True,
-                    list_length=10,
-                    cmp_scale=4.0,
-                ),
-                # rewards.SmoothingComponent(
-                #     name="throttle_penalty",
-                #     props=[prp.throttle_cmd],
-                #     state_variables=self.action_variables,
-                #     is_potential_based=True,
-                #     list_length=20,
-                #     cmp_scale=4.0,
-                # ),
-                rewards.SmoothingComponent(
-                    name="altitude_contain",
-                    props=[prp.altitude_sl_ft],
-                    state_variables=self.state_variables,
-                    is_potential_based=True,
-                    list_length=20,
-                    cmp_scale=80000.0,
+            if stage_number == 1:
+                base_components = (
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_action",
+                        prop=prp.aileron_cmd,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_thrust",
+                        prop=prp.throttle_cmd,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.4,
+                        scaling_factor=0.05,
+                        cmp_scale=8.0,
+                    ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_roll",
+                        prop=prp.roll_rad,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    )
                 )
+                shaping_components = (
+                    rewards.SmoothingComponent(
+                        name="action_penalty",
+                        props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
+                        state_variables=self.state_variables,
+                        is_potential_based=True,
+                        list_length=10,
+                        cmp_scale=4.0,
+                    ),
+                    # rewards.SmoothingComponent(
+                    #     name="throttle_penalty",
+                    #     props=[prp.throttle_cmd],
+                    #     state_variables=self.action_variables,
+                    #     is_potential_based=True,
+                    #     list_length=20,
+                    #     cmp_scale=4.0,
+                    # ),
+                    rewards.SmoothingComponent(
+                        name="altitude_contain",
+                        props=[prp.altitude_sl_ft],
+                        state_variables=self.state_variables,
+                        is_potential_based=True,
+                        list_length=20,
+                        cmp_scale=80000.0,
+                    )
                 )
-            return assessors.AssessorImpl(
-                base_components,
-                shaping_components,
-                positive_rewards=self.positive_rewards,
-            )
+            elif stage_number == 2:
+                base_components = (
+                    rewards.UserDefinedComponent(
+                        name = "relative_position",
+                        func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
+                        props=(self.track_angle_rad, self.adverse_angle_rad),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="closure_rate",
+                        func=lambda closure, adverse, distance:
+                            closure/500 * (1-logistic(adverse/(math.pi),18,0.5)) * logistic(distance,1/500,2900),
+                        props=(self.closure_rate, self.adverse_angle_rad, self.distance_oppo_ft),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="gunsnap_blue",
+                        func=lambda distance, track:
+                            GammaB(distance) * (1 - logistic(track/(math.pi), 1e5, 1/180)),
+                        props=(self.distance_oppo_ft, self.track_angle_rad),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="gunsnap_red",
+                        func=lambda distance, adverse:
+                            -GammaR(distance) * logistic(adverse/(math.pi), 800, 178/180),
+                        props=(self.distance_oppo_ft, self.adverse_angle_rad),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck",
+                        func=lambda h: -4 * (1-logistic(h, 1/20, 1300)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    # rewards.UserDefinedComponent(
+                    #     name="too_close",
+                    #     func=lambda adverse, distance:
+                    #         -2 * (1-logistic(adverse/(math.pi), 18, 0.5)) * logistic(distance, 1/50, 800),
+                    #     props=(self.adverse_angle_rad, self.distance_oppo_ft),
+                    #     state_variables=self.state_variables,
+                    #     cmp_scale=1.0
+                    # )
+                )
+            if not base_components and not shaping_components:
+                raise ValueError(f"Reward function of {shaping_type} is not defined")
         else:
-            raise ValueError(f"Unsupported shaping type: {shaping_type}")
+            raise ValueError(f"Unsupported shaping type: {shaping_type} (for this task)")
+        
+        return assessors.AssessorImpl(
+            base_components,
+            shaping_components,
+            positive_rewards=self.positive_rewards,
+        )
 
     def get_initial_conditions(self) -> Dict[Property, float]:
         extra_conditions = {

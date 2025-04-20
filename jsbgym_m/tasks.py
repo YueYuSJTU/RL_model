@@ -4,6 +4,7 @@ import random
 import types
 import math
 import enum
+import re
 import warnings
 from collections import namedtuple
 import jsbgym_m.properties as prp
@@ -244,6 +245,17 @@ class Shaping(enum.Enum):
     STANDARD = "STANDARD"
     EXTRA = "EXTRA"
     EXTRA_SEQUENTIAL = "EXTRA_SEQUENTIAL"
+
+    @staticmethod
+    def is_stage_type(shaping_type: str) -> bool:
+        """
+        检查 shaping_type 是否为 'stage*' 格式，其中 * 为任意数字。
+        """
+        if isinstance(shaping_type, Shaping):
+            shaping_type = shaping_type.value 
+        if shaping_type in Shaping.__members__:
+            return False
+        return re.fullmatch(r"stage\d+", shaping_type) is not None
 
 
 class HeadingControlTask(FlightTask):

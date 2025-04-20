@@ -60,6 +60,7 @@ def get_env_id_kwargs_map() -> Dict[str, Tuple]:
     from jsbgym_m.task_fly import FlyTask
 
     map = {}
+    stage_types = [f"stage{n}" for n in range(1, 11)]
     for task_type in (HeadingControlTask, TurnHeadingControlTask, SmoothHeadingTask, TrajectoryTask, TrackingTask, FlyTask):
         for plane in (
             c172,
@@ -77,7 +78,7 @@ def get_env_id_kwargs_map() -> Dict[str, Tuple]:
             wf,
             ss,
         ):
-            for shaping in (Shaping.STANDARD, Shaping.EXTRA, Shaping.EXTRA_SEQUENTIAL):
+            for shaping in (Shaping.STANDARD, Shaping.EXTRA, Shaping.EXTRA_SEQUENTIAL, *stage_types):
                 for enable_flightgear in (True, False):
                     id = get_env_id(plane, task_type, shaping, enable_flightgear)
                     assert id not in map
