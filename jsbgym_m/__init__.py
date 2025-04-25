@@ -1,7 +1,8 @@
 import gymnasium as gym
 import enum
-from jsbgym_m.tasks import Task, HeadingControlTask, TurnHeadingControlTask
-from jsbgym_m.aircraft import Aircraft, c172
+from jsbgym_m.tasks import Task, HeadingControlTask, TurnHeadingControlTask, Shaping
+from jsbgym_m.task_tracking import TrackingTask, Opponent
+from jsbgym_m.aircraft import Aircraft, c172, f16
 from jsbgym_m import utils
 
 """
@@ -21,10 +22,17 @@ for env_id, (
     shaping,
     enable_flightgear,
 ) in utils.get_env_id_kwargs_map().items():
-    if enable_flightgear:
-        entry_point = "jsbgym_m.environment:JsbSimEnv"
+    if task == TrackingTask:
+        opponent = task("stage1",1,f16).opponent
+        if enable_flightgear:
+            entry_point = "jsbgym_m.environment:DoubleJsbSimEnv" if opponent == "jsbsim" else "jsbgym_m.environment:JsbSimEnv"
+        else:
+            entry_point = "jsbgym_m.environment:NoFGDoubleJsbSimEnv" if opponent == "jsbsim" else "jsbgym_m.environment:NoFGJsbSimEnv"
     else:
-        entry_point = "jsbgym_m.environment:NoFGJsbSimEnv"
+        if enable_flightgear:
+            entry_point = "jsbgym_m.environment:JsbSimEnv"
+        else:
+            entry_point = "jsbgym_m.environment:NoFGJsbSimEnv"
     kwargs = dict(aircraft=plane, task_type=task, shaping=shaping)
     gym.envs.registration.register(id=env_id, entry_point=entry_point, kwargs=kwargs)
 

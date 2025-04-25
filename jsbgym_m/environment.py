@@ -4,7 +4,7 @@ from jsbgym_m.tasks import Shaping, HeadingControlTask
 from jsbgym_m.task_tracking import TrackingTask
 from jsbgym_m.simulation import Simulation
 from jsbgym_m.visualiser import FigureVisualiser, FlightGearVisualiser, GraphVisualiser
-from jsbgym_m.aircraft import Aircraft, c172
+from jsbgym_m.aircraft import Aircraft, c172, f16
 from typing import Optional, Type, Tuple, Dict
 import warnings
 
@@ -269,6 +269,167 @@ class NoFGJsbSimEnv(JsbSimEnv):
             allow_flightgear_output=False,
         )
 
+    def render(self, flightgear_blocking=True):
+        if (
+            self.render_mode == "flightgear"
+            or self.render_mode == "human_fg"
+            or self.render_mode == "graph_fg"
+        ):
+            raise ValueError("FlightGear rendering is disabled for this class")
+        else:
+            super().render(flightgear_blocking)
+
+class DoubleJsbSimEnv(JsbSimEnv):
+    def __init__(
+        self,
+        aircraft: Aircraft = f16,
+        task_type: Type = TrackingTask,
+        agent_interaction_freq: int = 10,
+        shaping: Shaping = Shaping.STANDARD,
+        render_mode: Optional[str] = None,
+        opponent_aircraft: Aircraft = f16,
+    ):
+        if task_type != TrackingTask:
+            raise ValueError(
+                "DoubleJsbSimEnv only supports TrackingTask for now."
+            )
+        super().__init__(
+            aircraft=aircraft,
+            task_type=task_type,
+            agent_interaction_freq=agent_interaction_freq,
+            shaping=shaping,
+            render_mode=render_mode,
+        )
+        # 新增对手飞机参数
+        self.opponent_aircraft = opponent_aircraft
+        self.opponent_sim: Simulation = None
+
+    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+        oppo_init_conditions = self.task.get_opponent_initial_conditions()
+        if self.opponent_sim:
+            self.opponent_sim.reinitialise(oppo_init_conditions)
+        else:
+            self.opponent_sim = self._init_new_sim(
+                self.JSBSIM_DT_HZ, self.opponent_aircraft, oppo_init_conditions
+            )
+        super(JsbSimEnv,self).reset(seed=seed)
+        init_conditions = self.task.get_initial_conditions()
+        if self.sim:
+            self.sim.reinitialise(init_conditions)
+        else:
+            self.sim = self._init_new_sim(
+                self.JSBSIM_DT_HZ, self.aircraft, init_conditions
+            )
+
+        state = self.task.observe_first_state(self.sim, self.opponent_sim)
+
+        if self.flightgear_visualiser:
+            self.flightgear_visualiser.configure_simulation_output(self.sim)
+        observation = np.array(state)
+        info = {}
+        if self.render_mode == "human":
+            self.render()
+        if self.render_mode == "graph":
+            try:
+                self.graph_visualiser.reset()
+            except AttributeError:
+                pass
+        if "NoFG" not in str(self):
+            warnings.warn(
+                "If training, use NoFG instead of FG in the env_id. Using FG will cause errors while training after a while."
+            )
+        return observation, info
+
+        
+    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
+        if (
+            self.render_mode == "human"
+            or self.render_mode == "graph"
+            or self.render_mode == "human_fg"
+            or self.render_mode == "graph_fg"
+        ):
+            self.render()
+        
+        if action.shape != self.action_space.shape:
+            raise ValueError("mismatch between action and action space size")
+
+        state, reward, terminated, truncated, info = self.task.task_step(
+            self.sim, action, self.sim_steps_per_agent_step, self.opponent_sim
+        )
+        observation = np.array(state)
+
+        # save reward components from info
+        if self.render_mode == "human":
+            if hasattr(self.task, "opponent"):
+                x, y, z, oppoX, oppoY, oppoZ = self.task.get_position(self.sim)
+                self.figure_visualiser.save_target(oppoX, oppoY, oppoZ)
+            else:
+                x, y, z = self.task.get_position(self.sim)
+            self.figure_visualiser.save_position(x, y, z)
+            self.figure_visualiser.save_reward_components(info["reward"])
+
+        # plot trajectory
+        if self.render_mode == "human" and terminated:
+            self.render()
+            if hasattr(self.task, "target_Xposition"):
+                target = [self.task._get_target_position("x"), 
+                          self.task._get_target_position("y"),
+                          self.task._get_target_position("z")]
+                self.figure_visualiser.plot_position(target)
+                self.figure_visualiser.plot_reward_components()
+            elif hasattr(self.task, "opponent"):
+                self.figure_visualiser.plot_position("tracking")
+                self.figure_visualiser.plot_reward_components()
+            else:
+                self.figure_visualiser.plot_position()
+                self.figure_visualiser.plot_reward_components()
+
+        return observation, reward, terminated, False, info
+
+    def close(self):
+        if self.opponent_sim:
+            self.opponent_sim.close()
+        super().close()
+
+
+
+
+        # # 这部分之后要放到task里面
+        # # 先运行对手飞机的控制逻辑
+        # opponent_action = self._get_opponent_action()
+        # self._apply_opponent_action(opponent_action)
+        
+        # # 再运行agent的动作
+        # for prop, cmd in zip(self.task.action_variables, action):
+        #     self.agent_sim[prop] = cmd
+            
+        # # 同步运行两个仿真
+        # for _ in range(sim_steps):
+        #     self.agent_sim.run()
+        #     self.opponent_sim.run()
+
+
+class NoFGDoubleJsbSimEnv(DoubleJsbSimEnv):
+    """
+    An RL environment for JSBSim with rendering to FlightGear disabled.
+    This class exists to be used for training agents where visualisation is not
+    required. Otherwise, restrictions in JSBSim output initialisation cause it
+    to open a new socket for every single episode, eventually leading to
+    failure of the network.
+    """
+
+    JSBSIM_DT_HZ: int = 60  # JSBSim integration frequency
+    metadata = {
+        "render_modes": ["human", "graph"],
+        "render_fps": 60,
+    }
+    def _init_new_sim(self, dt: float, aircraft: Aircraft, initial_conditions: Dict):
+        return Simulation(
+            sim_frequency_hz=dt,
+            aircraft=aircraft,
+            init_conditions=initial_conditions,
+            allow_flightgear_output=False,
+        )
     def render(self, flightgear_blocking=True):
         if (
             self.render_mode == "flightgear"

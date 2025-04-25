@@ -207,7 +207,7 @@ class TrackingTask(FlightTask):
         "oppo/velocities/v-fps", "body frame y-axis velocity [ft/s]", -2200, 2200
     )
     oppo_w_fps = BoundedProperty(
-        "oppo/velocities/w-fps", "body frame z-axis velocity [ft/s]", 0, 2200
+        "oppo/velocities/w-fps", "body frame z-axis velocity [ft/s]", -2200, 2200
     )
     oppo_p_radps = BoundedProperty(
         "oppo/velocities/p-rad_sec", "roll rate [rad/s]", -2 * math.pi, 2 * math.pi
@@ -340,7 +340,7 @@ class TrackingTask(FlightTask):
             "info/steps_left", "steps remaining in episode", 0, episode_steps
         )
         self.aircraft = aircraft
-        self.opponent = self._create_opponent()
+        self.opponent = self._create_opponent(model = "jsbsim")
         self.state_variables = (
             FlightTask.base_state_variables
             + self.tracking_state_variables
@@ -354,11 +354,16 @@ class TrackingTask(FlightTask):
         # self.target_theta = 0
         super().__init__(assessor)
     
-    def _create_opponent(self) -> Opponent:
+    def _create_opponent(self, model: str = "trival") -> Opponent:
         """
         Create the opponent aircraft.
         """
-        return Opponent()
+        if model == "trival":
+            return Opponent()
+        elif model == "jsbsim":
+            return "jsbsim"
+        else:
+            raise ValueError("Unsupported opponent model: {}".format(model))
     
     def make_assessor(self, shaping_type: Shaping) -> assessors.AssessorImpl:
         """
@@ -488,13 +493,87 @@ class TrackingTask(FlightTask):
             if not base_components and not shaping_components:
                 raise ValueError(f"Reward function of {shaping_type} is not defined")
         else:
-            raise ValueError(f"Unsupported shaping type: {shaping_type} (for this task)")
+            raise ValueError(f"Unsupported shaping type: {shaping_type} , you should use 'stage*' as shaping type")
         
         return assessors.AssessorImpl(
             base_components,
             shaping_components,
             positive_rewards=self.positive_rewards,
         )
+    
+    def task_step(
+        self, sim: Simulation, action: Sequence[float], sim_steps: int, opponent_sim: Simulation=None
+    ) -> Tuple[NamedTuple, float, bool, Dict]:
+        if self.opponent == "jsbsim":
+            if opponent_sim is None:
+                raise ValueError("Opponent_sim is None. ")
+            opponent_action = self._get_opponent_action(opponent_sim)
+            for prop, command in zip(self.action_variables, opponent_action):
+                opponent_sim[prop] = command
+
+        # input actions
+        for prop, command in zip(self.action_variables, action):
+            sim[prop] = command
+
+        # run simulation
+        for _ in range(sim_steps):
+            if self.opponent == "jsbsim":
+                opponent_sim.run()
+            sim.run()
+
+        self._update_custom_properties(sim, opponent_sim)
+        state = self.State(*(sim[prop] for prop in self.state_variables))
+        terminated = self._is_terminal(sim)
+        truncated = False
+        reward = self.assessor.assess(state, self.last_state, terminated)
+        reward_components = self.assessor.assess_components(state, self.last_state, terminated)
+        if terminated:
+            reward = self._reward_terminal_override(reward, sim)
+        if self.debug:
+            self._validate_state(state, terminated, truncated, action, reward)
+        self._store_reward(reward, sim)
+        self.last_state = state
+        info = {"reward": reward_components}
+
+        return state, reward.agent_reward(), terminated, False, info
+
+    def _get_opponent_action(self, opponent_sim: Simulation) -> Sequence[float]:
+        """
+        敌机的控制逻辑
+        TODO: 把oppo_state_variables中的量真正放到opponent_sim中
+        """
+        # Simple control logic to maintain level flight by adjusting the elevator
+        pitch_error = opponent_sim[prp.pitch_rad]  # Get the current pitch angle
+        elevator_command = -0.06 + 0.1 * pitch_error  # Proportional control to reduce pitch error
+        elevator_command = np.clip(elevator_command, -1.0, 1.0)  # Ensure command is within valid range
+        return [0.0, elevator_command, 0.0, 0.4]  # [aileron, elevator, rudder, throttle]
+
+    def get_opponent_initial_conditions(self) -> Dict[Property, float]:
+        """
+        Get the initial conditions for the opponent aircraft.
+        """
+        base_oppo_initial_conditions = (
+            types.MappingProxyType(  # MappingProxyType makes dict immutable
+                {
+                    prp.initial_altitude_ft: 6000,
+                    prp.initial_terrain_altitude_ft: 0.00000001,
+                    prp.initial_longitude_geoc_deg: -2.3273,
+                    prp.initial_latitude_geod_deg: 51.3781,  # corresponds to UoBath
+                }
+            )
+        )
+        extra_conditions = {
+            prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(), # 这里后续应该改成目标飞机的巡航速度
+            prp.initial_v_fps: 0,
+            prp.initial_w_fps: 0,
+            prp.initial_p_radps: 0,
+            prp.initial_q_radps: 0,
+            prp.initial_r_radps: 0,
+            prp.initial_roc_fpm: 0,
+            prp.initial_heading_deg: 180,
+        }
+        return {**base_oppo_initial_conditions, **extra_conditions}
+
 
     def get_initial_conditions(self) -> Dict[Property, float]:
         extra_conditions = {
@@ -509,9 +588,9 @@ class TrackingTask(FlightTask):
         }
         return {**self.base_initial_conditions, **extra_conditions}
 
-    def _update_custom_properties(self, sim: Simulation) -> None:
+    def _update_custom_properties(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         self._cal_self_position(sim)
-        self._cal_oppo_state(sim)
+        self._cal_oppo_state(sim, opponent_sim)
         self._update_extra_properties(sim)
         self._update_HP(sim)
         self._update_steps_left(sim)
@@ -543,27 +622,53 @@ class TrackingTask(FlightTask):
             sim[self.oppo_altitude_sl_ft]
         )
 
-    def _cal_oppo_state(self, sim: Simulation) -> None:
+    def _cal_oppo_state(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         """
         Calculate the state of the opponent aircraft.
         """
         # get raw data
-        oppo_state = self.opponent.step(self.step_frequency_hz)
-        sim[self.oppo_x_ft] = oppo_state["x_position_ft"]
-        sim[self.oppo_y_ft] = oppo_state["y_position_ft"]
-        sim[self.oppo_altitude_sl_ft] = oppo_state["altidude_sl_ft"]
-        sim[self.oppo_roll_rad] = oppo_state["roll_rad"]
-        sim[self.oppo_pitch_rad] = oppo_state["pitch_rad"]
-        sim[self.oppo_heading_deg] = oppo_state["heading_deg"]
-        sim[self.oppo_u_fps] = oppo_state["u_fps"]
-        sim[self.oppo_v_fps] = oppo_state["v_fps"]
-        sim[self.oppo_w_fps] = oppo_state["w_fps"]
-        sim[self.oppo_p_radps] = oppo_state["p_radps"]
-        sim[self.oppo_q_radps] = oppo_state["q_radps"]
-        sim[self.oppo_r_radps] = oppo_state["r_radps"]
-        sim[self.oppo_alpha_deg] = oppo_state["alpha_deg"]
-        sim[self.oppo_beta_deg] = oppo_state["beta_deg"]
-        sim[self.oppo_vtrue_fps] = oppo_state["vtrue_fps"]
+        if isinstance(self.opponent, Opponent):
+            oppo_state = self.opponent.step(self.step_frequency_hz)
+            sim[self.oppo_x_ft] = oppo_state["x_position_ft"]
+            sim[self.oppo_y_ft] = oppo_state["y_position_ft"]
+            sim[self.oppo_altitude_sl_ft] = oppo_state["altidude_sl_ft"]
+            sim[self.oppo_roll_rad] = oppo_state["roll_rad"]
+            sim[self.oppo_pitch_rad] = oppo_state["pitch_rad"]
+            sim[self.oppo_heading_deg] = oppo_state["heading_deg"]
+            sim[self.oppo_u_fps] = oppo_state["u_fps"]
+            sim[self.oppo_v_fps] = oppo_state["v_fps"]
+            sim[self.oppo_w_fps] = oppo_state["w_fps"]
+            sim[self.oppo_p_radps] = oppo_state["p_radps"]
+            sim[self.oppo_q_radps] = oppo_state["q_radps"]
+            sim[self.oppo_r_radps] = oppo_state["r_radps"]
+            sim[self.oppo_alpha_deg] = oppo_state["alpha_deg"]
+            sim[self.oppo_beta_deg] = oppo_state["beta_deg"]
+            sim[self.oppo_vtrue_fps] = oppo_state["vtrue_fps"]
+        elif self.opponent == "jsbsim":
+            if opponent_sim is None:
+                raise ValueError("Opponent_sim is None. You should give it when calculating opponent state.")
+            opponent_position = self.coordinate_transform.ecef2ned(
+                opponent_sim[prp.ecef_x_ft],
+                opponent_sim[prp.ecef_y_ft],
+                opponent_sim[prp.ecef_z_ft]
+            )
+            sim[self.oppo_x_ft] = opponent_position[0]
+            sim[self.oppo_y_ft] = opponent_position[1]
+            sim[self.oppo_altitude_sl_ft] = opponent_sim[prp.altitude_sl_ft]
+            sim[self.oppo_roll_rad] = opponent_sim[prp.roll_rad]
+            sim[self.oppo_pitch_rad] = opponent_sim[prp.pitch_rad]
+            sim[self.oppo_heading_deg] = opponent_sim[prp.heading_deg]
+            sim[self.oppo_u_fps] = opponent_sim[prp.u_fps]
+            sim[self.oppo_v_fps] = opponent_sim[prp.v_fps]
+            sim[self.oppo_w_fps] = opponent_sim[prp.w_fps]
+            sim[self.oppo_p_radps] = opponent_sim[prp.p_radps]
+            sim[self.oppo_q_radps] = opponent_sim[prp.q_radps]
+            sim[self.oppo_r_radps] = opponent_sim[prp.r_radps]
+            sim[self.oppo_alpha_deg] = opponent_sim[prp.alpha_deg]
+            sim[self.oppo_beta_deg] = opponent_sim[prp.beta_deg]
+            sim[self.oppo_vtrue_fps] = opponent_sim[prp.vtrue_fps]
+        else:
+            raise ValueError("Unsupported opponent model: {}".format(self.opponent))
 
         oppo_position = prp.Vector3(
             sim[self.oppo_x_ft],
@@ -716,7 +821,15 @@ class TrackingTask(FlightTask):
         # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward
 
-    def _new_episode_init(self, sim: Simulation) -> None:
+
+    def observe_first_state(self, sim: Simulation, opponent_sim: Simulation=None) -> np.ndarray:
+        self._new_episode_init(sim, opponent_sim)
+        self._update_custom_properties(sim, opponent_sim)
+        state = self.State(*(sim[prop] for prop in self.state_variables))
+        self.last_state = state
+        return state
+
+    def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         super()._new_episode_init(sim)
         sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
         sim[self.steps_left] = self.steps_left.max
@@ -728,7 +841,12 @@ class TrackingTask(FlightTask):
         sim[self.aircraft_HP] = self.HP
         sim[self.opponent_HP] = self.HP
 
-        self.opponent.reset()
+        if isinstance(self.opponent, Opponent):
+            self.opponent.reset()
+        elif self.opponent == "jsbsim":
+            if opponent_sim is None:
+                raise ValueError("Opponent_sim is None. You should give it when restart a new episode.")
+            super()._new_episode_init(opponent_sim)
 
     def get_props_to_output(self) -> Tuple:
         return (
