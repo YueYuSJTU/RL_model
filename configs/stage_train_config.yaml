@@ -1,9 +1,9 @@
 # 阶段训练通用配置
 stage1:
   stage_num: 1
-  agent: ppo_1layer
+  agent: ppo_1layer1
   env: f16_tracking_stage1
-  total_timesteps: 100_000
+  total_timesteps: 300_000
   eval_freq: 10000
   log_root: "./experiments"
   seed: 42
@@ -12,136 +12,157 @@ stage1:
 
 stage2:
   stage_num: 2
-  agent: ppo_1layer
+  agent: ppo_1layer1
   env: f16_tracking_stage2
-  total_timesteps: 10000_000
+  total_timesteps: 45000_000
   eval_freq: 10000
   log_root: "./experiments"
   seed: 42
   num_cpu: 8
 
-# 阶段训练通用配置
-stage3:
-  stage_num: 1
-  agent: ppo_1layer
-  env: f16_tracking_stage1
-  total_timesteps: 200_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# # 阶段训练通用配置
+# stage3:
+#   stage_num: 1
+#   agent: ppo_1layer2
+#   env: f16_tracking_stage1
+#   total_timesteps: 300_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-stage4:
-  stage_num: 2
-  agent: ppo_1layer
-  env: f16_tracking_stage2
-  total_timesteps: 10000_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# stage4:
+#   stage_num: 2
+#   agent: ppo_1layer2
+#   env: f16_tracking_stage2
+#   total_timesteps: 15000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-# 阶段训练通用配置
-stage5:
-  stage_num: 1
-  agent: ppo_1layer
-  env: f16_tracking_stage1
-  total_timesteps: 300_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# # 阶段训练通用配置
+# stage5:
+#   stage_num: 1
+#   agent: ppo_1layer
+#   env: f16_tracking_stage1
+#   total_timesteps: 300_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-stage6:
-  stage_num: 2
-  agent: ppo_1layer
-  env: f16_tracking_stage2
-  total_timesteps: 10000_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# stage6:
+#   stage_num: 2
+#   agent: ppo_1layer3
+#   env: f16_tracking_stage2
+#   total_timesteps: 15000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-# 阶段训练通用配置
-stage7:
-  stage_num: 1
-  agent: ppo_1layer
-  env: f16_tracking_stage1
-  total_timesteps: 400_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# # 阶段训练通用配置
+# stage7:
+#   stage_num: 1
+#   agent: ppo_1layer
+#   env: f16_tracking_stage1
+#   total_timesteps: 300_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-stage8:
-  stage_num: 2
-  agent: ppo_1layer
-  env: f16_tracking_stage2
-  total_timesteps: 10000_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# stage8:
+#   stage_num: 2
+#   agent: ppo_1layer4
+#   env: f16_tracking_stage2
+#   total_timesteps: 15000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-# 阶段训练通用配置
-stage9:
-  stage_num: 1
-  agent: ppo_1layer
-  env: f16_tracking_stage1
-  total_timesteps: 500_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# # 阶段训练通用配置
+# stage9:
+#   stage_num: 1
+#   agent: ppo_1layer
+#   env: f16_tracking_stage1
+#   total_timesteps: 300_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-stage10:
-  stage_num: 2
-  agent: ppo_1layer
-  env: f16_tracking_stage2
-  total_timesteps: 10000_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# stage10:
+#   stage_num: 2
+#   agent: ppo_1layer5
+#   env: f16_tracking_stage2
+#   total_timesteps: 15000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-# 阶段训练通用配置
-stage11:
-  stage_num: 1
-  agent: ppo_1layer
-  env: f16_tracking_stage1
-  total_timesteps: 600_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# # 阶段训练通用配置
+# stage11:
+#   stage_num: 1
+#   agent: ppo_1layer
+#   env: f16_tracking_stage1
+#   total_timesteps: 320_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-stage12:
-  stage_num: 2
-  agent: ppo_1layer
-  env: f16_tracking_stage2
-  total_timesteps: 10000_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# stage12:
+#   stage_num: 2
+#   agent: ppo_1layer
+#   env: f16_tracking_stage2
+#   total_timesteps: 10000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-# 阶段训练通用配置
-stage13:
-  stage_num: 1
-  agent: ppo_1layer
-  env: f16_tracking_stage1
-  total_timesteps: 700_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# # 阶段训练通用配置
+# stage13:
+#   stage_num: 1
+#   agent: ppo_1layer
+#   env: f16_tracking_stage1
+#   total_timesteps: 340_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
 
-stage14:
-  stage_num: 2
-  agent: ppo_1layer
-  env: f16_tracking_stage2
-  total_timesteps: 10000_000
-  eval_freq: 10000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 8
+# stage14:
+#   stage_num: 2
+#   agent: ppo_1layer
+#   env: f16_tracking_stage2
+#   total_timesteps: 10000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
+
+# # 阶段训练通用配置
+# stage15:
+#   stage_num: 1
+#   agent: ppo_1layer
+#   env: f16_tracking_stage1
+#   total_timesteps: 360_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8
+
+# stage16:
+#   stage_num: 2
+#   agent: ppo_1layer
+#   env: f16_tracking_stage2
+#   total_timesteps: 10000_000
+#   eval_freq: 10000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 8

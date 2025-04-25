@@ -1,1 +1,0 @@
-tensorboard --logdir ./experiments/last_train/tensorboard
