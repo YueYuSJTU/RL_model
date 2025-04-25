@@ -389,7 +389,7 @@ class TrackingTask(FlightTask):
                         state_variables=self.state_variables,
                         is_potential_based=False,
                         target=0.4,
-                        scaling_factor=0.05,
+                        scaling_factor=0.1,
                         cmp_scale=8.0,
                     ),
                     rewards.ScaledAsymptoticErrorComponent(
@@ -475,7 +475,15 @@ class TrackingTask(FlightTask):
                     #     props=(self.adverse_angle_rad, self.distance_oppo_ft),
                     #     state_variables=self.state_variables,
                     #     cmp_scale=1.0
-                    # )
+                    # ),
+                    rewards.UserDefinedComponent(
+                        name="small action",
+                        func=lambda aileron, elevator:
+                            -1*abs(aileron) - abs(elevator),
+                        props=(prp.aileron_cmd, prp.elevator_cmd),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    )
                 )
             if not base_components and not shaping_components:
                 raise ValueError(f"Reward function of {shaping_type} is not defined")
@@ -700,6 +708,8 @@ class TrackingTask(FlightTask):
         self, reward: rewards.Reward, sim: Simulation
     ) -> rewards.Reward:
         add_reward = (self.HP - sim[self.opponent_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
+        if sim[self.opponent_HP] <= 0:
+            add_reward += sim[self.steps_left] * 2.6  # TODO:规范化奖励函数大小
         if sim[self.aircraft_HP] <= 0:
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
         reward.set_additional_reward(add_reward)
@@ -728,10 +738,11 @@ class TrackingTask(FlightTask):
             self.track_angle_rad,
             self.adverse_angle_rad,
             self.closure_rate,
-            self.bearing_accountingRollPitch_rad,
-            self.elevation_accountingRollPitch_rad,
-            self.bearing_pointMass_rad,
-            self.elevation_pointMass_rad,
+            # self.bearing_accountingRollPitch_rad,
+            # self.elevation_accountingRollPitch_rad,
+            # self.bearing_pointMass_rad,
+            # self.elevation_pointMass_rad,
+            self.opponent_HP,
             self.steps_left,
         )
 
@@ -752,7 +763,7 @@ def GammaB(distance):
         return betaB(distance) * (1 - logistic(distance, 1/50, 2900))
 
 def betaB(distance):
-    return 3
+    return 2.5
 
 def GammaR(distance):
     if distance < 2250:
@@ -761,4 +772,4 @@ def GammaR(distance):
         return betaR(distance) * (1 - logistic(distance, 1/200, 4100))
 
 def betaR(distance):
-    return -3
+    return -2.5
