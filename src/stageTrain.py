@@ -11,6 +11,46 @@ from environments.make_env import create_env
 from utils.logger import setup_logger
 from utils.serialization import save_config
 from agents.make_agent import creat_agent, load_agent
+from evaluate import evaluate
+
+def find_latest_training_result(stage_path):
+    """
+    查找stage_path下最新的训练结果路径
+    
+    Args:
+        stage_path: 包含所有stage的根目录
+        
+    Returns:
+        latest_result_path: 最新训练结果的路径
+    """
+    # 查找所有stage文件夹
+    stage_dirs = [d for d in os.listdir(stage_path) 
+                 if os.path.isdir(os.path.join(stage_path, d)) and "stage" in d]
+    
+    if not stage_dirs:
+        raise ValueError(f"在 {stage_path} 中没有找到stage文件夹")
+    
+    # 找到最新的stage（按修改时间排序）
+    latest_stage = max(
+        [os.path.join(stage_path, d) for d in stage_dirs],
+        key=os.path.getmtime
+    )
+    
+    # 在最新stage中查找训练结果
+    result_dirs = [d for d in os.listdir(latest_stage) 
+                  if os.path.isdir(os.path.join(latest_stage, d))]
+    
+    if not result_dirs:
+        # 如果没有子文件夹，使用stage目录本身
+        return latest_stage
+    
+    # 找到最新的训练结果（按修改时间排序）
+    latest_result = max(
+        [os.path.join(latest_stage, d) for d in result_dirs],
+        key=os.path.getmtime
+    )
+    
+    return latest_result
 
 def train(stage_path: str = ""):
     # 加载配置
@@ -91,12 +131,9 @@ def train(stage_path: str = ""):
         if os.path.exists(best_model_path):
             shutil.copy(best_model_path, os.path.join(log_path, ".."))
 
-    # # 复制内容到 experiments/last_train 文件夹
-    # last_train_path = os.path.join("experiments", "last_train")
-    # os.makedirs(last_train_path, exist_ok=True)
-    # if os.path.exists(last_train_path):
-    #     shutil.rmtree(last_train_path)
-    # shutil.copytree(log_path, last_train_path)
+    # 在训练结束后查找最新的训练结果并进行评估
+    latest_result = find_latest_training_result(stage_path)
+    evaluate(latest_result, stage_path, n_episodes=1000)
 
 if __name__ == "__main__":
     train()

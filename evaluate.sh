@@ -36,146 +36,87 @@ selected_exp_name=$(basename "$selected_exp")
 echo "已选择实验: $selected_exp_name"
 echo ""
 
-# 检查是否存在tensorboard文件夹
-has_tensorboard=0
-if [ -d "${selected_exp}tensorboard" ]; then
-    has_tensorboard=1
-    echo "[0] tensorboard"
+# 列出选定实验中的所有目录（可能包含stage）
+all_dirs=($(ls -d "$selected_exp"/*/))
+if [ ${#all_dirs[@]} -eq 0 ]; then
+    echo "错误：所选实验中没有任何子文件夹"
+    exit 1
 fi
 
-# 列出选定实验中的所有stage
-echo "可用的stages："
-stages=($(ls -d "$selected_exp"/*/))
+# 过滤出可能的stage文件夹（排除tensorboard等特殊文件夹）
+stages=()
+for dir in "${all_dirs[@]}"; do
+    dir_name=$(basename "$dir")
+    # 如果文件夹名不是tensorboard，则认为是stage
+    if [ "$dir_name" != "tensorboard" ]; then
+        stages+=("$dir")
+    fi
+done
+
 if [ ${#stages[@]} -eq 0 ]; then
     echo "错误：所选实验中没有stage文件夹"
     exit 1
 fi
 
-stage_count=0
-for i in "${!stages[@]}"; do
-    # 去掉路径前缀和尾部斜杠
-    folder_name=$(basename "${stages[$i]}")
-    # 跳过tensorboard文件夹
-    if [ "$folder_name" != "tensorboard" ]; then
-        stage_count=$((stage_count+1))
-        echo "[$stage_count] $folder_name"
+# 找到最新的stage（按文件夹修改时间排序）
+latest_stage=""
+latest_time=0
+
+for stage in "${stages[@]}"; do
+    # 获取文件夹的最后修改时间
+    mod_time=$(stat -c %Y "$stage")
+    if (( mod_time > latest_time )); then
+        latest_time=$mod_time
+        latest_stage=$stage
     fi
 done
 
-# 询问用户选择哪个stage或者tensorboard
-max_option=$stage_count
-if [ $has_tensorboard -eq 1 ]; then
-    read -p "请选择tensorboard或要评估的stage [0-$max_option]: " option_idx
-    
-    # 处理tensorboard选项
-    if [ "$option_idx" -eq 0 ]; then
-        echo "已选择tensorboard，启动tensorboard..."
-        # 这里可以添加启动tensorboard的代码
-        tensorboard --logdir="${selected_exp}tensorboard"
-        exit 0
-    fi
-    
-    # 将用户选择映射回实际的stage索引
-    stage_idx=0
-    current_option=0
-    for i in "${!stages[@]}"; do
-        folder_name=$(basename "${stages[$i]}")
-        if [ "$folder_name" != "tensorboard" ]; then
-            current_option=$((current_option+1))
-            if [ $current_option -eq $option_idx ]; then
-                stage_idx=$i
-                break
-            fi
-        fi
-    done
-else
-    read -p "请选择要评估的stage [1-$max_option]: " option_idx
-    
-    # 将用户选择映射回实际的stage索引
-    stage_idx=0
-    current_option=0
-    for i in "${!stages[@]}"; do
-        folder_name=$(basename "${stages[$i]}")
-        if [ "$folder_name" != "tensorboard" ]; then
-            current_option=$((current_option+1))
-            if [ $current_option -eq $option_idx ]; then
-                stage_idx=$i
-                break
-            fi
-        fi
-    done
-fi
-
-# 验证输入
-if ! [[ "$option_idx" =~ ^[0-9]+$ ]] || [ "$option_idx" -lt 0 ] || ([ $has_tensorboard -eq 0 ] && [ "$option_idx" -eq 0 ]) || [ "$option_idx" -gt "$max_option" ]; then
-    echo "错误：无效的选择"
-    exit 1
-fi
-
-selected_stage="${stages[$stage_idx]}"
-selected_stage_name=$(basename "$selected_stage")
-
-echo "已选择: $selected_stage_name"
+latest_stage_name=$(basename "$latest_stage")
+echo "自动选择了最新的stage: $latest_stage_name"
 echo ""
 
-# 列出选定stage中的所有训练结果
-echo "可用的训练结果："
-results=($(ls -d "$selected_stage"/*/))
+# 在最新的stage中查找训练结果
+results=($(ls -d "$latest_stage"/*/))
 if [ ${#results[@]} -eq 0 ]; then
-    # 如果没有子文件夹，则使用当前目录
-    results=("$selected_stage")
-    for i in "${!results[@]}"; do
-        echo "[$i] ."  # 表示当前目录
-    done
+    # 如果没有子文件夹，则使用当前stage目录
+    echo "在此stage中未找到训练结果子文件夹，将使用stage目录本身"
+    latest_result="$latest_stage"
+    latest_result_name="."
 else
-    for i in "${!results[@]}"; do
-        folder_name=$(basename "${results[$i]}")
-        echo "[$i] $folder_name"
+    # 找到最新的训练结果（按文件夹修改时间排序）
+    latest_result=""
+    latest_result_time=0
+    
+    for result in "${results[@]}"; do
+        # 获取文件夹的最后修改时间
+        mod_time=$(stat -c %Y "$result")
+        if (( mod_time > latest_result_time )); then
+            latest_result_time=$mod_time
+            latest_result=$result
+        fi
     done
+    
+    latest_result_name=$(basename "$latest_result")
 fi
 
-# 询问用户选择哪个训练结果
-read -p "请选择要评估的训练结果 [0-$((${#results[@]}-1))]: " result_idx
-
-# 验证输入
-if ! [[ "$result_idx" =~ ^[0-9]+$ ]] || [ "$result_idx" -ge "${#results[@]}" ]; then
-    echo "错误：无效的选择"
-    exit 1
-fi
-
-selected_result="${results[$result_idx]}"
-selected_result_name=$(basename "$selected_result")
-
-echo "已选择训练结果: $selected_result_name"
+echo "自动选择了最新的训练结果: $latest_result_name"
 echo ""
 
-# 询问用户使用什么渲染模式
-echo "可用的渲染模式:"
-echo "[0] human"
-echo "[1] flightgear"
-echo "[2] none"
+# 询问用户评估次数
+read -p "请输入评估次数 [默认: 500]: " n_episodes
+n_episodes=${n_episodes:-500}  # 如果用户未输入，则使用默认值
 
-read -p "请选择渲染模式 [0-2]: " mode_idx
+# 评估结果保存在与stage同级的文件夹
+eval_log_dir="$selected_exp"
 
-case $mode_idx in
-    0)
-        render_mode="human"
-        ;;
-    1)
-        render_mode="flightgear"
-        ;;
-    2)
-        render_mode="none"
-        ;;
-    *)
-        echo "错误：无效的选择"
-        exit 1
-        ;;
-esac
-
-echo "已选择渲染模式: $render_mode"
+# 显示评估信息
+echo "开始评估..."
+echo "评估路径: $latest_result"
+echo "评估次数: $n_episodes"
+echo "结果将保存至: $eval_log_dir"
 echo ""
 
 # 调用Python脚本进行评估
-echo "开始评估..."
-python3 -c "import sys; sys.path.append('.'); from src.evaluate import evaluate; evaluate('$selected_result', '$render_mode')"
+python -c "import sys; sys.path.append('.'); from src.evaluate import evaluate; evaluate('$latest_result', '$eval_log_dir', $n_episodes)"
+
+echo "评估完成"
