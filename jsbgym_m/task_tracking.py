@@ -340,7 +340,7 @@ class TrackingTask(FlightTask):
             "info/steps_left", "steps remaining in episode", 0, episode_steps
         )
         self.aircraft = aircraft
-        self.opponent = self._create_opponent(model = "jsbsim")
+        self.opponent = self._create_opponent(model = "trival")
         self.state_variables = (
             FlightTask.base_state_variables
             + self.tracking_state_variables
@@ -527,13 +527,17 @@ class TrackingTask(FlightTask):
         truncated = False
         reward = self.assessor.assess(state, self.last_state, terminated)
         reward_components = self.assessor.assess_components(state, self.last_state, terminated)
+        env_info = None
         if terminated:
             reward = self._reward_terminal_override(reward, sim)
+            win = sim[self.opponent_HP] <= 0 and sim[self.oppo_altitude_sl_ft] > 1
+            # print(f"debug: steps_left: {sim[self.steps_left]}, win: {win}")
+            env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
         if self.debug:
             self._validate_state(state, terminated, truncated, action, reward)
         self._store_reward(reward, sim)
         self.last_state = state
-        info = {"reward": reward_components}
+        info = {"reward": reward_components, "env_info": env_info}
 
         return state, reward.agent_reward(), terminated, False, info
 
@@ -814,7 +818,7 @@ class TrackingTask(FlightTask):
     ) -> rewards.Reward:
         add_reward = (self.HP - sim[self.opponent_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
         if sim[self.opponent_HP] <= 0:
-            add_reward += sim[self.steps_left] * 2.6  # TODO:规范化奖励函数大小
+            add_reward += sim[self.steps_left] * 3.7  # TODO:规范化奖励函数大小
         if sim[self.aircraft_HP] <= 0:
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
         reward.set_additional_reward(add_reward)
