@@ -4,6 +4,7 @@ import random
 import types
 import math
 import enum
+import os
 import warnings
 from pyquaternion import Quaternion
 from collections import namedtuple
@@ -18,6 +19,7 @@ from typing import Optional, Sequence, Dict, Tuple, NamedTuple, Type
 from jsbgym_m.tasks import HeadingControlTask, Shaping, FlightTask
 from jsbgym_m.task_advanced import TrajectoryTask
 from jsbgym_m.coordinate import GPS_utils, GPS_NED
+from stable_baselines3 import PPO
 
 class Opponent(object):
     """
@@ -351,7 +353,7 @@ class TrackingTask(FlightTask):
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')
-        # self.target_theta = 0
+        self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
         super().__init__(assessor)
     
     def _create_opponent(self, model: str = "trival") -> Opponent:
@@ -545,12 +547,33 @@ class TrackingTask(FlightTask):
         """
         敌机的控制逻辑
         """
-        # Simple control logic to maintain level flight by adjusting the elevator
-        pitch_error = opponent_sim[prp.pitch_rad]  # Get the current pitch angle
-        alieron_command = 0.05 * np.random.rand()  # Random aileron command
-        elevator_command = -0.06 + 0.1 * pitch_error + 0.01 * np.random.rand()  # Proportional control to reduce pitch error
-        elevator_command = np.clip(elevator_command, -1.0, 1.0)  # Ensure command is within valid range
-        return [0.0, elevator_command, 0.0, 0.4]  # [aileron, elevator, rudder, throttle]
+        # # Simple control logic to maintain level flight by adjusting the elevator
+        # pitch_error = opponent_sim[prp.pitch_rad]  # Get the current pitch angle
+        # alieron_command = 0.05 * np.random.rand()  # Random aileron command
+        # elevator_command = -0.06 + 0.1 * pitch_error + 0.01 * np.random.rand()  # Proportional control to reduce pitch error
+        # elevator_command = np.clip(elevator_command, -1.0, 1.0)  # Ensure command is within valid range
+        # return [0.0, elevator_command, 0.0, 0.4]  # [aileron, elevator, rudder, throttle]
+
+        # AI based control logic
+        model = self._load_opponent_model()
+        obs = np.array([opponent_sim[prop] for prop in self.state_variables])
+        action, _ = model.predict(obs)
+        # print(f"opponent action: {action}")
+        return action
+    
+    def _load_opponent_model(self):
+        """
+        Load the opponent model.
+        """
+        # Load the model from the specified path
+        model_path = f"{self.opponent_model_root}/best_model.zip"
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+        model = PPO.load(
+            model_path,
+            device="cpu",
+        )
+        return model
 
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
