@@ -315,9 +315,9 @@ class TrackingTask(FlightTask):
     aircraft_HP = prp.BoundedProperty(
         "aircraft/aircraft_HP", "aircraft HP", 0, HP
     )
-    opponent_HP = prp.BoundedProperty(
-        "opponent/opponent_HP", "opponent HP", 0, HP
-    )
+    # opponent_HP = prp.BoundedProperty(
+    #     "opponent/opponent_HP", "opponent HP", 0, HP
+    # )
 
     def __init__(
         self,
@@ -340,7 +340,7 @@ class TrackingTask(FlightTask):
             "info/steps_left", "steps remaining in episode", 0, episode_steps
         )
         self.aircraft = aircraft
-        self.opponent = self._create_opponent(model = "trival")
+        self.opponent = self._create_opponent(model="jsbsim")
         self.state_variables = (
             FlightTask.base_state_variables
             + self.tracking_state_variables
@@ -523,14 +523,14 @@ class TrackingTask(FlightTask):
 
         self._update_custom_properties(sim, opponent_sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
-        terminated = self._is_terminal(sim)
+        terminated = self._is_terminal(sim, opponent_sim)
         truncated = False
         reward = self.assessor.assess(state, self.last_state, terminated)
         reward_components = self.assessor.assess_components(state, self.last_state, terminated)
         env_info = None
         if terminated:
-            reward = self._reward_terminal_override(reward, sim)
-            win = sim[self.opponent_HP] <= 0 and sim[self.oppo_altitude_sl_ft] > 1
+            reward = self._reward_terminal_override(reward, sim, opponent_sim)
+            win = opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 1
             # print(f"debug: steps_left: {sim[self.steps_left]}, win: {win}")
             env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
         if self.debug:
@@ -544,11 +544,11 @@ class TrackingTask(FlightTask):
     def _get_opponent_action(self, opponent_sim: Simulation) -> Sequence[float]:
         """
         敌机的控制逻辑
-        TODO: 把oppo_state_variables中的量真正放到opponent_sim中
         """
         # Simple control logic to maintain level flight by adjusting the elevator
         pitch_error = opponent_sim[prp.pitch_rad]  # Get the current pitch angle
-        elevator_command = -0.06 + 0.1 * pitch_error  # Proportional control to reduce pitch error
+        alieron_command = 0.05 * np.random.rand()  # Random aileron command
+        elevator_command = -0.06 + 0.1 * pitch_error + 0.01 * np.random.rand()  # Proportional control to reduce pitch error
         elevator_command = np.clip(elevator_command, -1.0, 1.0)  # Ensure command is within valid range
         return [0.0, elevator_command, 0.0, 0.4]  # [aileron, elevator, rudder, throttle]
 
@@ -593,13 +593,13 @@ class TrackingTask(FlightTask):
         return {**self.base_initial_conditions, **extra_conditions}
 
     def _update_custom_properties(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
-        self._cal_self_position(sim)
+        self._cal_self_position(sim, opponent_sim)
+        self._update_extra_properties(sim, opponent_sim)
         self._cal_oppo_state(sim, opponent_sim)
-        self._update_extra_properties(sim)
-        self._update_HP(sim)
-        self._update_steps_left(sim)
+        self._update_HP(sim, opponent_sim)
+        self._update_steps_left(sim, opponent_sim)
 
-    def _cal_self_position(self, sim: Simulation) -> None:
+    def _cal_self_position(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         """
         Calculate the position of the self aircraft.
         """
@@ -612,6 +612,15 @@ class TrackingTask(FlightTask):
         sim[self.ned_Yposition_ft] = self_position[1]
         # Z position 使用海拔高度
         # sim[self.ned_Zposition_ft] = self_position[2]
+
+        if opponent_sim is not None:
+            opponent_position = self.coordinate_transform.ecef2ned(
+                opponent_sim[prp.ecef_x_ft],
+                opponent_sim[prp.ecef_y_ft],
+                opponent_sim[prp.ecef_z_ft]
+            )
+            opponent_sim[self.ned_Xposition_ft] = opponent_position[0]
+            opponent_sim[self.ned_Yposition_ft] = opponent_position[1]
     
     def get_position(self, sim: Simulation) -> Tuple[float, float, float]:
         """
@@ -651,13 +660,14 @@ class TrackingTask(FlightTask):
         elif self.opponent == "jsbsim":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. You should give it when calculating opponent state.")
-            opponent_position = self.coordinate_transform.ecef2ned(
-                opponent_sim[prp.ecef_x_ft],
-                opponent_sim[prp.ecef_y_ft],
-                opponent_sim[prp.ecef_z_ft]
-            )
-            sim[self.oppo_x_ft] = opponent_position[0]
-            sim[self.oppo_y_ft] = opponent_position[1]
+            # opponent_position = self.coordinate_transform.ecef2ned(
+            #     opponent_sim[prp.ecef_x_ft],
+            #     opponent_sim[prp.ecef_y_ft],
+            #     opponent_sim[prp.ecef_z_ft]
+            # )
+            self._update_extra_properties(sim=opponent_sim, opponent_sim=sim)
+            sim[self.oppo_x_ft] = opponent_sim[self.ned_Xposition_ft]
+            sim[self.oppo_y_ft] = opponent_sim[self.ned_Yposition_ft]
             sim[self.oppo_altitude_sl_ft] = opponent_sim[prp.altitude_sl_ft]
             sim[self.oppo_roll_rad] = opponent_sim[prp.roll_rad]
             sim[self.oppo_pitch_rad] = opponent_sim[prp.pitch_rad]
@@ -671,50 +681,77 @@ class TrackingTask(FlightTask):
             sim[self.oppo_alpha_deg] = opponent_sim[prp.alpha_deg]
             sim[self.oppo_beta_deg] = opponent_sim[prp.beta_deg]
             sim[self.oppo_vtrue_fps] = opponent_sim[prp.vtrue_fps]
+            sim[self.oppo_track_angle_rad] = opponent_sim[self.track_angle_rad]
+            sim[self.oppo_bearing_accountingRollPitch_rad] = opponent_sim[self.bearing_accountingRollPitch_rad]
+            sim[self.oppo_elevation_accountingRollPitch_rad] = opponent_sim[self.elevation_accountingRollPitch_rad]
+            sim[self.oppo_bearing_pointMass_rad] = opponent_sim[self.bearing_pointMass_rad]
+            sim[self.oppo_elevation_pointMass_rad] = opponent_sim[self.elevation_pointMass_rad]
+
+            opponent_sim[self.oppo_x_ft] = sim[self.ned_Xposition_ft]
+            opponent_sim[self.oppo_y_ft] = sim[self.ned_Yposition_ft]
+            opponent_sim[self.oppo_altitude_sl_ft] = sim[prp.altitude_sl_ft]
+            opponent_sim[self.oppo_roll_rad] = sim[prp.roll_rad]
+            opponent_sim[self.oppo_pitch_rad] = sim[prp.pitch_rad]
+            opponent_sim[self.oppo_heading_deg] = sim[prp.heading_deg]
+            opponent_sim[self.oppo_u_fps] = sim[prp.u_fps]
+            opponent_sim[self.oppo_v_fps] = sim[prp.v_fps]
+            opponent_sim[self.oppo_w_fps] = sim[prp.w_fps]
+            opponent_sim[self.oppo_p_radps] = sim[prp.p_radps]
+            opponent_sim[self.oppo_q_radps] = sim[prp.q_radps]
+            opponent_sim[self.oppo_r_radps] = sim[prp.r_radps]
+            opponent_sim[self.oppo_alpha_deg] = sim[prp.alpha_deg]
+            opponent_sim[self.oppo_beta_deg] = sim[prp.beta_deg]
+            opponent_sim[self.oppo_vtrue_fps] = sim[prp.vtrue_fps]
+            opponent_sim[self.oppo_track_angle_rad] = sim[self.track_angle_rad]
+            opponent_sim[self.oppo_bearing_accountingRollPitch_rad] = sim[self.bearing_accountingRollPitch_rad]
+            opponent_sim[self.oppo_elevation_accountingRollPitch_rad] = sim[self.elevation_accountingRollPitch_rad]
+            opponent_sim[self.oppo_bearing_pointMass_rad] = sim[self.bearing_pointMass_rad]
+            opponent_sim[self.oppo_elevation_pointMass_rad] = sim[self.elevation_pointMass_rad]
+
         else:
             raise ValueError("Unsupported opponent model: {}".format(self.opponent))
 
-        oppo_position = prp.Vector3(
-            sim[self.oppo_x_ft],
-            sim[self.oppo_y_ft],
-            sim[self.oppo_altitude_sl_ft]
-        )
-        own_position = prp.Vector3(
-            sim[self.ned_Xposition_ft],
-            sim[self.ned_Yposition_ft],
-            sim[prp.altitude_sl_ft]
-        )
-
-        sim[self.oppo_bearing_pointMass_rad] = prp.Vector3.cal_angle(
-            (own_position-oppo_position).project_to_plane("xy"), 
-            prp.Vector3(x=1, y=0, z=0)
-        )
-
-        dlt_x, dlt_y, dlt_z = (own_position-oppo_position).get_xyz()
-        sim[self.oppo_elevation_pointMass_rad] = math.atan2(dlt_z, math.sqrt(dlt_x**2+dlt_y**2))
-        R = Quaternion(0, dlt_x, dlt_y, -dlt_z)
-        # Q = Quaternion(axis=[0,0,1], radians=math.radians(oppo_state["heading_deg"]))
-        Q = prp.Eular2Quaternion(
-            psi=math.radians(sim[self.oppo_heading_deg]),
-            theta=sim[self.oppo_pitch_rad],
-            phi=sim[self.oppo_roll_rad]
-        )
-        Rb = Q.inverse * R * Q
-        rbx, rby, rbz = Rb.vector
-        sim[self.oppo_track_angle_rad] = prp.Vector3.cal_angle(
-            prp.Vector3(rbx, rby, rbz),
-            prp.Vector3(1, 0, 0)
-        )
-        # sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
-        #     prp.Vector3(rbx, rby, rbz),
-        #     prp.Vector3(-1, 0, 0)
+        # oppo_position = prp.Vector3(
+        #     sim[self.oppo_x_ft],
+        #     sim[self.oppo_y_ft],
+        #     sim[self.oppo_altitude_sl_ft]
+        # )
+        # own_position = prp.Vector3(
+        #     sim[self.ned_Xposition_ft],
+        #     sim[self.ned_Yposition_ft],
+        #     sim[prp.altitude_sl_ft]
         # )
 
-        sim[self.oppo_bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
-        sim[self.oppo_elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
+        # sim[self.oppo_bearing_pointMass_rad] = prp.Vector3.cal_angle(
+        #     (own_position-oppo_position).project_to_plane("xy"), 
+        #     prp.Vector3(x=1, y=0, z=0)
+        # )
+
+        # dlt_x, dlt_y, dlt_z = (own_position-oppo_position).get_xyz()
+        # sim[self.oppo_elevation_pointMass_rad] = math.atan2(dlt_z, math.sqrt(dlt_x**2+dlt_y**2))
+        # R = Quaternion(0, dlt_x, dlt_y, -dlt_z)
+        # # Q = Quaternion(axis=[0,0,1], radians=math.radians(oppo_state["heading_deg"]))
+        # Q = prp.Eular2Quaternion(
+        #     psi=math.radians(sim[self.oppo_heading_deg]),
+        #     theta=sim[self.oppo_pitch_rad],
+        #     phi=sim[self.oppo_roll_rad]
+        # )
+        # Rb = Q.inverse * R * Q
+        # rbx, rby, rbz = Rb.vector
+        # sim[self.oppo_track_angle_rad] = prp.Vector3.cal_angle(
+        #     prp.Vector3(rbx, rby, rbz),
+        #     prp.Vector3(1, 0, 0)
+        # )
+        # # sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
+        # #     prp.Vector3(rbx, rby, rbz),
+        # #     prp.Vector3(-1, 0, 0)
+        # # )
+
+        # sim[self.oppo_bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
+        # sim[self.oppo_elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
 
         
-    def _update_extra_properties(self, sim: Simulation) -> None:
+    def _update_extra_properties(self, sim: Simulation, opponent_sim: Simulation) -> None:
         """
         Update the extra properties.
         """
@@ -724,9 +761,12 @@ class TrackingTask(FlightTask):
             sim[prp.altitude_sl_ft]
         )
         oppo_position = prp.Vector3(
-            sim[self.oppo_x_ft],
-            sim[self.oppo_y_ft],
-            sim[self.oppo_altitude_sl_ft]
+            # sim[self.oppo_x_ft],
+            # sim[self.oppo_y_ft],
+            # sim[self.oppo_altitude_sl_ft]
+            opponent_sim[self.ned_Xposition_ft],
+            opponent_sim[self.ned_Yposition_ft],
+            opponent_sim[prp.altitude_sl_ft]
         )
 
         if sim[self.steps_left] == self.steps_left.max:
@@ -758,39 +798,46 @@ class TrackingTask(FlightTask):
             prp.Vector3(1, 0, 0)
         )
 
-        R_ = Quaternion(0, -dlt_x, -dlt_y, dlt_z)
-        Q_ = prp.Eular2Quaternion(
-            psi=math.radians(sim[self.oppo_heading_deg]),
-            theta=sim[self.oppo_pitch_rad],
-            phi=sim[self.oppo_roll_rad]
-        )
-        Rb_ = Q_.inverse * R_ * Q_
-        rbx_, rby_, rbz_ = Rb_.vector
-        sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
-            prp.Vector3(rbx_, rby_, rbz_),
+        # R_ = Quaternion(0, -dlt_x, -dlt_y, dlt_z)
+        # Q_ = prp.Eular2Quaternion(
+        #     psi=math.radians(opponent_sim[prp.heading_deg]),
+        #     theta=opponent_sim[prp.pitch_rad],
+        #     phi=opponent_sim[prp.roll_rad]
+        # )
+        # Rb_ = Q_.inverse * R_ * Q_
+        # rbx_, rby_, rbz_ = Rb_.vector
+        # sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
+        #     prp.Vector3(rbx_, rby_, rbz_),
+        #     prp.Vector3(-1, 0, 0)
+        # )
+
+
+        opponent_sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
+            prp.Vector3(rbx, rby, rbz),
             prp.Vector3(-1, 0, 0)
         )
+        # print(f"opponent adverse angle: {opponent_sim[self.adverse_angle_rad]}")
 
         sim[self.bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
         sim[self.elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
 
 
-    def _update_HP(self, sim: Simulation) -> None:
+    def _update_HP(self, sim: Simulation, opponent_sim: Simulation) -> None:
         """
         Update the HP of the aircraft and opponent aircraft.
         """
         # update opponent HP
         if sim[self.track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
             damage = (3000 - sim[self.distance_oppo_ft]) / 2500 / self.step_frequency_hz
-            if sim[self.opponent_HP] > 0:
-                sim[self.opponent_HP] -= damage
+            if opponent_sim[self.aircraft_HP] > 0:
+                opponent_sim[self.aircraft_HP] -= damage
             else:
-                sim[self.opponent_HP] = 0
-        if sim[self.oppo_altitude_sl_ft] <= 1:
-            sim[self.opponent_HP] = 0
+                opponent_sim[self.aircraft_HP] = 0
+        if opponent_sim[prp.altitude_sl_ft] <= 1:
+            opponent_sim[self.aircraft_HP] = 0
 
         # update self HP
-        if sim[self.oppo_track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
+        if opponent_sim[self.track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
             damage = (3000 - sim[self.distance_oppo_ft]) / 2500 / self.step_frequency_hz
             if sim[self.aircraft_HP] > 0:
                 sim[self.aircraft_HP] -= damage
@@ -800,24 +847,25 @@ class TrackingTask(FlightTask):
         #     sim[self.aircraft_HP] = 0
         
 
-    def _update_steps_left(self, sim: Simulation):
+    def _update_steps_left(self, sim: Simulation, opponent_sim: Simulation) -> None:
         sim[self.steps_left] -= 1
+        opponent_sim[self.steps_left] -= 1
 
-    def _is_terminal(self, sim: Simulation) -> bool:
+    def _is_terminal(self, sim: Simulation, opponent_sim: Simulation) -> bool:
         # terminate when time >= max, but use math.isclose() for float equality test
         terminal_step = sim[self.steps_left] <= 0
-        HP_is_zero = self._is_hp_zero(sim)
+        HP_is_zero = self._is_hp_zero(sim, opponent_sim)
         return terminal_step or HP_is_zero
     
-    def _is_hp_zero(self, sim: Simulation) -> bool:
+    def _is_hp_zero(self, sim: Simulation, opponent_sim: Simulation) -> bool:
         # print(f"self HP: {sim[self.aircraft_HP]}, opponent HP: {sim[self.opponent_HP]}")
-        return sim[self.aircraft_HP] <= 0 or sim[self.opponent_HP] <= 0
+        return sim[self.aircraft_HP] <= 0 or opponent_sim[self.aircraft_HP] <= 0
     
     def _reward_terminal_override(
-        self, reward: rewards.Reward, sim: Simulation
+        self, reward: rewards.Reward, sim: Simulation, opponent_sim: Simulation
     ) -> rewards.Reward:
-        add_reward = (self.HP - sim[self.opponent_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
-        if sim[self.opponent_HP] <= 0:
+        add_reward = (self.HP - opponent_sim[self.aircraft_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
+        if opponent_sim[self.aircraft_HP] <= 0:
             add_reward += sim[self.steps_left] * 3.7  # TODO:规范化奖励函数大小
         if sim[self.aircraft_HP] <= 0:
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
@@ -837,13 +885,14 @@ class TrackingTask(FlightTask):
         super()._new_episode_init(sim)
         sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
         sim[self.steps_left] = self.steps_left.max
+        opponent_sim[self.steps_left] = self.steps_left.max
         self.init_ecef_position = [sim[prp.ecef_x_ft], 
                                    sim[prp.ecef_y_ft], 
                                    sim[prp.ecef_z_ft]]
         lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
         self.coordinate_transform.setNEDorigin(*lla_position)
         sim[self.aircraft_HP] = self.HP
-        sim[self.opponent_HP] = self.HP
+        opponent_sim[self.aircraft_HP] = self.HP
 
         if isinstance(self.opponent, Opponent):
             self.opponent.reset()
@@ -860,11 +909,7 @@ class TrackingTask(FlightTask):
             self.track_angle_rad,
             self.adverse_angle_rad,
             self.closure_rate,
-            # self.bearing_accountingRollPitch_rad,
-            # self.elevation_accountingRollPitch_rad,
-            # self.bearing_pointMass_rad,
-            # self.elevation_pointMass_rad,
-            self.opponent_HP,
+            # self.opponent_HP,
             self.steps_left,
         )
 
