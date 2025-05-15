@@ -355,7 +355,7 @@ class TrackingTask(FlightTask):
         self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
         self.opponent = self._create_opponent(model="jsbsim")
         if self.opponent == "jsbsim":
-            self.opponent_model = self._load_opponent_model()
+            self.opponent_model, self.opponent_env = self._load_opponent_model()
         super().__init__(assessor)
     
     def _create_opponent(self, model: str = "trival") -> Opponent:
@@ -558,6 +558,7 @@ class TrackingTask(FlightTask):
 
         # AI based control logic
         obs = np.array([opponent_sim[prop] for prop in self.state_variables])
+        obs = self.opponent_env.normalize_obs(obs)
         action, _ = self.opponent_model.predict(obs)
         # action = np.random.uniform(-1, 1, size=4)
         # print(f"opponent action: {action}")
@@ -567,15 +568,21 @@ class TrackingTask(FlightTask):
         """
         Load the opponent model.
         """
+        import pickle
         # Load the model from the specified path
         model_path = f"{self.opponent_model_root}/best_model.zip"
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
+        
+        # 直接从pkl文件加载标准化参数
+        with open(f"{self.opponent_model_root}/final_train_env.pkl", "rb") as f:
+            vec_env = pickle.load(f)
+        
         model = PPO.load(
             model_path,
             device="cpu",
         )
-        return model
+        return model, vec_env
 
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
