@@ -342,7 +342,6 @@ class TrackingTask(FlightTask):
             "info/steps_left", "steps remaining in episode", 0, episode_steps
         )
         self.aircraft = aircraft
-        self.opponent = self._create_opponent(model="jsbsim")
         self.state_variables = (
             FlightTask.base_state_variables
             + self.tracking_state_variables
@@ -354,6 +353,9 @@ class TrackingTask(FlightTask):
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')
         self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
+        self.opponent = self._create_opponent(model="jsbsim")
+        if self.opponent == "jsbsim":
+            self.opponent_model = self._load_opponent_model()
         super().__init__(assessor)
     
     def _create_opponent(self, model: str = "trival") -> Opponent:
@@ -555,9 +557,9 @@ class TrackingTask(FlightTask):
         # return [0.0, elevator_command, 0.0, 0.4]  # [aileron, elevator, rudder, throttle]
 
         # AI based control logic
-        model = self._load_opponent_model()
         obs = np.array([opponent_sim[prop] for prop in self.state_variables])
-        action, _ = model.predict(obs)
+        action, _ = self.opponent_model.predict(obs)
+        # action = np.random.uniform(-1, 1, size=4)
         # print(f"opponent action: {action}")
         return action
     
@@ -888,10 +890,11 @@ class TrackingTask(FlightTask):
         self, reward: rewards.Reward, sim: Simulation, opponent_sim: Simulation
     ) -> rewards.Reward:
         add_reward = (self.HP - opponent_sim[self.aircraft_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
-        if opponent_sim[self.aircraft_HP] <= 0:
+        if opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 1:
             add_reward += sim[self.steps_left] * 3.7  # TODO:规范化奖励函数大小
         if sim[self.aircraft_HP] <= 0:
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
+        # add_reward = 0
         reward.set_additional_reward(add_reward)
         # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward

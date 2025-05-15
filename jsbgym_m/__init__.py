@@ -23,11 +23,11 @@ for env_id, (
     enable_flightgear,
 ) in utils.get_env_id_kwargs_map().items():
     if task == TrackingTask:
-        opponent = task("stage1",1,f16).opponent
+        # opponent = task("stage1",1,f16).opponent
         if enable_flightgear:
-            entry_point = "jsbgym_m.environment:DoubleJsbSimEnv" if opponent == "jsbsim" else "jsbgym_m.environment:JsbSimEnv"
+            entry_point = "jsbgym_m.environment:DoubleJsbSimEnv" #if opponent == "jsbsim" else "jsbgym_m.environment:JsbSimEnv"
         else:
-            entry_point = "jsbgym_m.environment:NoFGDoubleJsbSimEnv" if opponent == "jsbsim" else "jsbgym_m.environment:NoFGJsbSimEnv"
+            entry_point = "jsbgym_m.environment:NoFGDoubleJsbSimEnv" #if opponent == "jsbsim" else "jsbgym_m.environment:NoFGJsbSimEnv"
     else:
         if enable_flightgear:
             entry_point = "jsbgym_m.environment:JsbSimEnv"
