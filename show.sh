@@ -178,4 +178,4 @@ echo ""
 
 # 调用Python脚本进行评估
 echo "开始评估..."
-python3 -c "import sys; sys.path.append('.'); from src.show import show; show('$selected_result', '$render_mode')"
+python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode"

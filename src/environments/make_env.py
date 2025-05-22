@@ -4,6 +4,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocV
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.env_util import make_vec_env
 from src.utils.yaml_import import import_class
+from src.environments.NN_vec_env import NNVecEnv
 import os
 import sys
 # 将项目根目录添加到sys.path（使用相对路径）
@@ -34,7 +35,7 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
             env_id, 
             n_envs=num_cpu, 
             wrapper_kwargs={"wrappers": wrappers}, 
-            vec_env_cls=SubprocVecEnv, 
+            vec_env_cls=NNVecEnv, 
             env_kwargs={"render_mode": render_mode}
         )
     else:
@@ -44,7 +45,7 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
             env_id, 
             n_envs=1, 
             wrapper_kwargs={"wrappers": wrappers}, 
-            vec_env_cls=DummyVecEnv,
+            vec_env_cls=NNVecEnv,
             env_kwargs={"render_mode": render_mode}
         )
 

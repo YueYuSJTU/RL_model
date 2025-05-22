@@ -1,8 +1,7 @@
 import os
 import yaml
-if __name__ == "__main__":
-    from utils.yaml_import import add_path
-    add_path()
+import sys
+sys.path.insert(0, "/home/ubuntu/Workfile/RL/RL_model")
 from typing import Dict
 from stable_baselines3 import PPO
 from src.environments.make_env import create_env
@@ -50,7 +49,14 @@ def show(exp_path: str, render_mode: str = "human"):
     vec_env.close()
 
 if __name__ == "__main__":
-    # 示例使用：show("./experiments/20240320_ppo_baseline", "human")
-    show("./experiments/last_train", "human")
-    # show("./experiments/last_train", "flightgear")
-    # show("./experiments/20250416_192206_ppo_1layer_TrackingTask", "human")
+    # # 示例使用：show("./experiments/20240320_ppo_baseline", "human")
+    # show("""/home/ubuntu/Workfile/RL/RL_model/experiments/20250514_164357/stage1/20250514_164357_TrackingTask_ppo_1layer1""", "human")
+    # # show("./experiments/last_train", "flightgear")
+    # # show("./experiments/20250416_192206_ppo_1layer_TrackingTask", "human")
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--exp_path", type=str, required=True)
+    parser.add_argument("--render_mode", type=str, default="human")
+    args = parser.parse_args()
+    show(args.exp_path, args.render_mode)

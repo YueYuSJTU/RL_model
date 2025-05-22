@@ -1,7 +1,7 @@
 # PPO-GRU 参数
 policy: "MlpPolicy"
 learning_rate: 1.0e-4
-device: "cpu"
+device: "cuda"
 verbose: 1
 n_steps: 2048
 batch_size: 256
