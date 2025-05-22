@@ -352,10 +352,10 @@ class TrackingTask(FlightTask):
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')
-        self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
+        # self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
         self.opponent = self._create_opponent(model="jsbsim")
-        if self.opponent == "jsbsim":
-            self.opponent_model, self.opponent_env = self._load_opponent_model()
+        # if self.opponent == "jsbsim":
+        #     self.opponent_model, self.opponent_env = self._load_opponent_model()
         super().__init__(assessor)
     
     def _create_opponent(self, model: str = "trival") -> Opponent:
@@ -505,18 +505,51 @@ class TrackingTask(FlightTask):
             positive_rewards=self.positive_rewards,
         )
     
+    def get_state_space(self) -> gym.Space:
+        state_lows = np.array([state_var.min for state_var in self.state_variables])
+        state_highs = np.array([state_var.max for state_var in self.state_variables])
+        
+        # 将观测空间扩展到原来的两倍
+        doubled_state_lows = np.concatenate([state_lows, state_lows])
+        doubled_state_highs = np.concatenate([state_highs, state_highs])
+        
+        return gym.spaces.Box(low=doubled_state_lows, high=doubled_state_highs, dtype=np.float64)
+
+    def get_action_space(self) -> gym.Space:
+        action_lows = np.array([act_var.min for act_var in self.action_variables])
+        action_highs = np.array([act_var.max for act_var in self.action_variables])
+        
+        # 将动作空间扩展到原来的两倍
+        doubled_action_lows = np.concatenate([action_lows, action_lows])
+        doubled_action_highs = np.concatenate([action_highs, action_highs])
+        
+        return gym.spaces.Box(low=doubled_action_lows, high=doubled_action_highs, dtype=np.float64)
+
     def task_step(
         self, sim: Simulation, action: Sequence[float], sim_steps: int, opponent_sim: Simulation=None
     ) -> Tuple[NamedTuple, float, bool, Dict]:
+        if len(action) == len(self.action_variables):
+            self_action = action
+            opponent_action = np.random.uniform(-1, 1, size=4)
+        elif len(action) == 2*len(self.action_variables):
+            self_action = action[:len(self.action_variables)]
+            opponent_action = action[len(self.action_variables):]
+        else:
+            raise ValueError(
+                f"Action length {len(action)} does not match the expected length {len(self.action_variables)} or {2*len(self.action_variables)}"
+            )
+        
+        # print(f"self action: {self_action}, opponent action: {opponent_action}")
+
         if self.opponent == "jsbsim":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. ")
-            opponent_action = self._get_opponent_action(opponent_sim)
+            # opponent_action = self._get_opponent_action(opponent_sim)
             for prop, command in zip(self.action_variables, opponent_action):
                 opponent_sim[prop] = command
 
         # input actions
-        for prop, command in zip(self.action_variables, action):
+        for prop, command in zip(self.action_variables, self_action):
             sim[prop] = command
 
         # run simulation
@@ -527,6 +560,7 @@ class TrackingTask(FlightTask):
 
         self._update_custom_properties(sim, opponent_sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
+        opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
         terminated = self._is_terminal(sim, opponent_sim)
         truncated = False
         reward = self.assessor.assess(state, self.last_state, terminated)
@@ -538,24 +572,18 @@ class TrackingTask(FlightTask):
             # print(f"debug: steps_left: {sim[self.steps_left]}, win: {win}")
             env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
         if self.debug:
-            self._validate_state(state, terminated, truncated, action, reward)
+            self._validate_state(state, terminated, truncated, self_action, reward)
         self._store_reward(reward, sim)
         self.last_state = state
         info = {"reward": reward_components, "env_info": env_info}
+        observation = np.concatenate([np.array(state), np.array(opponent_state)])
 
-        return state, reward.agent_reward(), terminated, False, info
+        return observation, reward.agent_reward(), terminated, False, info
 
     def _get_opponent_action(self, opponent_sim: Simulation) -> Sequence[float]:
         """
         敌机的控制逻辑
         """
-        # # Simple control logic to maintain level flight by adjusting the elevator
-        # pitch_error = opponent_sim[prp.pitch_rad]  # Get the current pitch angle
-        # alieron_command = 0.05 * np.random.rand()  # Random aileron command
-        # elevator_command = -0.06 + 0.1 * pitch_error + 0.01 * np.random.rand()  # Proportional control to reduce pitch error
-        # elevator_command = np.clip(elevator_command, -1.0, 1.0)  # Ensure command is within valid range
-        # return [0.0, elevator_command, 0.0, 0.4]  # [aileron, elevator, rudder, throttle]
-
         # AI based control logic
         obs = np.array([opponent_sim[prop] for prop in self.state_variables])
         obs = self.opponent_env.normalize_obs(obs)
@@ -564,25 +592,25 @@ class TrackingTask(FlightTask):
         # print(f"opponent action: {action}")
         return action
     
-    def _load_opponent_model(self):
-        """
-        Load the opponent model.
-        """
-        import pickle
-        # Load the model from the specified path
-        model_path = f"{self.opponent_model_root}/best_model.zip"
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found: {model_path}")
+    # def _load_opponent_model(self):
+    #     """
+    #     Load the opponent model.
+    #     """
+    #     import pickle
+    #     # Load the model from the specified path
+    #     model_path = f"{self.opponent_model_root}/best_model.zip"
+    #     if not os.path.exists(model_path):
+    #         raise FileNotFoundError(f"Model file not found: {model_path}")
         
-        # 直接从pkl文件加载标准化参数
-        with open(f"{self.opponent_model_root}/final_train_env.pkl", "rb") as f:
-            vec_env = pickle.load(f)
+    #     # 直接从pkl文件加载标准化参数
+    #     with open(f"{self.opponent_model_root}/final_train_env.pkl", "rb") as f:
+    #         vec_env = pickle.load(f)
         
-        model = PPO.load(
-            model_path,
-            device="cpu",
-        )
-        return model, vec_env
+    #     model = PPO.load(
+    #         model_path,
+    #         device="cpu",
+    #     )
+    #     return model, vec_env
 
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
@@ -912,7 +940,9 @@ class TrackingTask(FlightTask):
         self._update_custom_properties(sim, opponent_sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
         self.last_state = state
-        return state
+        opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
+        observation = np.concatenate([np.array(state), np.array(opponent_state)])
+        return observation
 
     def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         super()._new_episode_init(sim)

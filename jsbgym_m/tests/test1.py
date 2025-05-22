@@ -32,13 +32,14 @@ ENV_ID = f"{plane}-{task}-{shape}-FG-v0" if render_mode == "flightgear" else f"{
 env = gym.make(ENV_ID, render_mode=render_mode)
 # env = gym.make(ENV_ID)
 env.reset()
-action = env.action_space.sample()
+action = np.concatenate([env.action_space.sample()[:4],np.array([1,1,1,1])])
 observation, reward, terminated, truncated, info = env.step(action)
 while not (terminated or truncated):
     if render_mode is not None:
         env.render()   
     observation, reward, terminated, truncated, info = env.step(action)
-    action = env.action_space.sample()
+    # action = env.action_space.sample()
+    action = np.concatenate([env.action_space.sample()[:4],np.array([1,1,1,1])])
     # print(f"Observation: {observation}, Reward: {reward}, Terminated: {terminated}, Truncated: {truncated}, Info: {info}")
 
 env.close()
