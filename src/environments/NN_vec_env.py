@@ -127,7 +127,7 @@ class NNVecEnv(SubprocVecEnv):
         
         with torch.no_grad():
             # predict自己会把数据转换到正确的设备上
-            actions, _ = self.opponent_model.predict(normalized_obs, deterministic=True)
+            actions, _ = self.opponent_model.predict(normalized_obs)
         
         # 随机输入
         # actions = np.random.uniform(-1, 1, size=(obs.shape[0], 4))

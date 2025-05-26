@@ -4,6 +4,7 @@
 ### User
 logs/
 experiments/
+opponent_pool/
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

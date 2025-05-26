@@ -1,0 +1,8 @@
+# 训练通用配置
+agent: ppo_1layer1
+env: f16_tracking_init
+total_timesteps: 600_000
+eval_freq: 1000
+log_root: "./opponent_pool"
+seed: 42
+num_cpu: 30
