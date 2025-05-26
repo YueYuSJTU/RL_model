@@ -34,7 +34,7 @@ class NNVecEnv(SubprocVecEnv):
             self, 
             env_fns, 
             start_method=None, 
-            NN_root: str = """/home/ubuntu/Workfile/RL/RL_model/experiments/20250519_112913/stage1/20250519_112913_TrackingTask_ppo_1layer1"""):
+            NN_root: str = """/home/ubuntu/Workfile/RL/RL_model/experiments/20250526_093055/stage1/20250526_093055_TrackingTask_ppo_1layer1"""):
         # 为了减半observation space和action space，必须复制父类init代码
         self.waiting = False
         self.closed = False
@@ -127,7 +127,15 @@ class NNVecEnv(SubprocVecEnv):
         
         with torch.no_grad():
             # predict自己会把数据转换到正确的设备上
-            actions, _ = self.opponent_model.predict(normalized_obs)
+            actions, _ = self.opponent_model.predict(normalized_obs, deterministic=True)
+        
+        # 随机输入
+        # actions = np.random.uniform(-1, 1, size=(obs.shape[0], 4))
+        # actions[:, -1] = np.abs(actions[:, -1])
+        # 固定对偶输入
+        # actions = np.zeros((obs.shape[0], 4))
+        # for i in range(obs.shape[0]):
+        #     actions[i] = np.array([0.5, 0.6, 0.0, 0.4])
         
         return actions
     
@@ -167,8 +175,9 @@ class NNVecEnv(SubprocVecEnv):
         """重置所有环境"""
         raw_observation = super().reset()
         self.opponent_observation = self._get_observation(raw_observation, "opponent").copy()
+        agent_obs = self._get_observation(raw_observation, "agent")
         self.obs_normalization_cache = None  # 清除缓存
-        return self.opponent_observation
+        return agent_obs
 
     def _get_observation(self, obs: np.ndarray, object: str = "agent") -> np.ndarray:
         """获取前半段或后半段观察值"""

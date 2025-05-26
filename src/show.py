@@ -2,13 +2,14 @@ import os
 import yaml
 import sys
 sys.path.insert(0, "/home/ubuntu/Workfile/RL/RL_model")
+import numpy as np
 from typing import Dict
 from stable_baselines3 import PPO
 from src.environments.make_env import create_env
 from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def show(exp_path: str, render_mode: str = "human"):
+def show(exp_path: str, render_mode: str = "human", random_input: bool = False):
     # 加载实验配置
     env_cfg = load_config(os.path.join(exp_path, "env_config.yaml"))
     agent_cfg = load_config(os.path.join(exp_path, "agent_config.yaml"))
@@ -40,9 +41,11 @@ def show(exp_path: str, render_mode: str = "human"):
         if render_mode is not None:
             vec_env.render()
         action, _ = model.predict(obs, deterministic=True)
+        if random_input:
+            action = np.random.uniform(-1, 1, size=(1,4))
+            action[:, -1] = np.abs(action[:, -1])
         obs, reward, terminated, _ = vec_env.step(action)
         total_reward += reward
-        # print(f"step{i}, obs: {obs}, action: {action}")
         if terminated:
             print(f"Episode terminated at step {i}, total reward: {total_reward}")
             break
@@ -58,5 +61,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_path", type=str, required=True)
     parser.add_argument("--render_mode", type=str, default="human")
+    parser.add_argument("--random_input", type=bool, default=False)
     args = parser.parse_args()
-    show(args.exp_path, args.render_mode)
+    show(args.exp_path, args.render_mode, args.random_input)
