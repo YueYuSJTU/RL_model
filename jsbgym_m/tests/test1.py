@@ -19,7 +19,7 @@ task = "TrackingTask"
 
 # shape = "Shaping.STANDARD"
 # shape = "Shaping.EXTRA"
-shape = "stage2"
+shape = "stage1"
 
 # render_mode = "flightgear"
 # render_mode = None
@@ -31,15 +31,20 @@ ENV_ID = f"{plane}-{task}-{shape}-FG-v0" if render_mode == "flightgear" else f"{
 # ENV_ID = "C172-HeadingControlTask-Shaping.EXTRA-FG-v0"
 env = gym.make(ENV_ID, render_mode=render_mode)
 # env = gym.make(ENV_ID)
+
+action1 = np.array([0.5, 0.06, 0.0, 0.4])
+action2 = np.array([-0.5, 0.06, 0.0, 0.4])
+
 env.reset()
-action = np.concatenate([env.action_space.sample()[:4],np.array([1,1,1,1])])
+# action = env.action_space.sample()
+action = np.concatenate((action1, action2))
 observation, reward, terminated, truncated, info = env.step(action)
 while not (terminated or truncated):
     if render_mode is not None:
         env.render()   
     observation, reward, terminated, truncated, info = env.step(action)
     # action = env.action_space.sample()
-    action = np.concatenate([env.action_space.sample()[:4],np.array([1,1,1,1])])
+    action = np.concatenate((action1, action2))
     # print(f"Observation: {observation}, Reward: {reward}, Terminated: {terminated}, Truncated: {truncated}, Info: {info}")
 
 env.close()

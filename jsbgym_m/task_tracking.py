@@ -409,7 +409,21 @@ class TrackingTask(FlightTask):
                         target=0.0,
                         scaling_factor=0.5,
                         cmp_scale=4.0,
-                    )
+                    ),
+                    # rewards.UserDefinedComponent(
+                    #     name="deck1",
+                    #     func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
+                    #     props=(prp.altitude_sl_ft,),
+                    #     state_variables=self.state_variables,
+                    #     cmp_scale=1.0
+                    # ),
+                    # rewards.UserDefinedComponent(
+                    #     name="deck2",
+                    #     func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
+                    #     props=(prp.altitude_sl_ft,),
+                    #     state_variables=self.state_variables,
+                    #     cmp_scale=1.0
+                    # ),
                 )
                 shaping_components = (
                     rewards.SmoothingComponent(
@@ -420,14 +434,6 @@ class TrackingTask(FlightTask):
                         list_length=10,
                         cmp_scale=4.0,
                     ),
-                    # rewards.SmoothingComponent(
-                    #     name="throttle_penalty",
-                    #     props=[prp.throttle_cmd],
-                    #     state_variables=self.action_variables,
-                    #     is_potential_based=True,
-                    #     list_length=20,
-                    #     cmp_scale=4.0,
-                    # ),
                     rewards.SmoothingComponent(
                         name="altitude_contain",
                         props=[prp.altitude_sl_ft],
@@ -435,7 +441,7 @@ class TrackingTask(FlightTask):
                         is_potential_based=True,
                         list_length=20,
                         cmp_scale=80000.0,
-                    )
+                    ),
                 )
             elif stage_number == 2:
                 base_components = (
@@ -580,37 +586,6 @@ class TrackingTask(FlightTask):
 
         return observation, reward.agent_reward(), terminated, False, info
 
-    def _get_opponent_action(self, opponent_sim: Simulation) -> Sequence[float]:
-        """
-        敌机的控制逻辑
-        """
-        # AI based control logic
-        obs = np.array([opponent_sim[prop] for prop in self.state_variables])
-        obs = self.opponent_env.normalize_obs(obs)
-        action, _ = self.opponent_model.predict(obs)
-        # action = np.random.uniform(-1, 1, size=4)
-        # print(f"opponent action: {action}")
-        return action
-    
-    # def _load_opponent_model(self):
-    #     """
-    #     Load the opponent model.
-    #     """
-    #     import pickle
-    #     # Load the model from the specified path
-    #     model_path = f"{self.opponent_model_root}/best_model.zip"
-    #     if not os.path.exists(model_path):
-    #         raise FileNotFoundError(f"Model file not found: {model_path}")
-        
-    #     # 直接从pkl文件加载标准化参数
-    #     with open(f"{self.opponent_model_root}/final_train_env.pkl", "rb") as f:
-    #         vec_env = pickle.load(f)
-        
-    #     model = PPO.load(
-    #         model_path,
-    #         device="cpu",
-    #     )
-    #     return model, vec_env
 
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
@@ -619,10 +594,10 @@ class TrackingTask(FlightTask):
         base_oppo_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
-                    prp.initial_altitude_ft: 6000,
+                    prp.initial_altitude_ft: 5000,
                     prp.initial_terrain_altitude_ft: 0.00000001,
                     prp.initial_longitude_geoc_deg: -2.3273,
-                    prp.initial_latitude_geod_deg: 51.3781,  # corresponds to UoBath
+                    prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
                 }
             )
         )
@@ -903,8 +878,8 @@ class TrackingTask(FlightTask):
                 sim[self.aircraft_HP] -= damage
             else:
                 sim[self.aircraft_HP] = 0
-        # if sim[prp.altitude_sl_ft] <= 1:
-        #     sim[self.aircraft_HP] = 0
+        if sim[prp.altitude_sl_ft] <= 1:
+            sim[self.aircraft_HP] = 0
         
 
     def _update_steps_left(self, sim: Simulation, opponent_sim: Simulation) -> None:
