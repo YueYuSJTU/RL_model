@@ -56,12 +56,11 @@ def get_env_id_kwargs_map() -> Dict[str, Tuple]:
     # lazy import to avoid circular dependencies
     from jsbgym_m.tasks import Shaping, HeadingControlTask
     from jsbgym_m.task_advanced import SmoothHeadingTask, TurnHeadingControlTask, TrajectoryTask
-    from jsbgym_m.task_tracking import TrackingTask
-    from jsbgym_m.task_fly import FlyTask
+    from jsbgym_m.task_tracking import TrackingTask, TrackingInitTask
 
     map = {}
     stage_types = [f"stage{n}" for n in range(1, 11)]
-    for task_type in (HeadingControlTask, TurnHeadingControlTask, SmoothHeadingTask, TrajectoryTask, TrackingTask, FlyTask):
+    for task_type in (HeadingControlTask, TurnHeadingControlTask, SmoothHeadingTask, TrajectoryTask, TrackingTask, TrackingInitTask):
         for plane in (
             c172,
             a320,

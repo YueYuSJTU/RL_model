@@ -289,7 +289,7 @@ class DoubleJsbSimEnv(JsbSimEnv):
         render_mode: Optional[str] = None,
         opponent_aircraft: Aircraft = f16,
     ):
-        if task_type != TrackingTask:
+        if not issubclass(task_type, TrackingTask):
             raise ValueError(
                 "DoubleJsbSimEnv only supports TrackingTask for now."
             )

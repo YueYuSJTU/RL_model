@@ -890,7 +890,7 @@ class TrackingTask(FlightTask):
         # terminate when time >= max, but use math.isclose() for float equality test
         terminal_step = sim[self.steps_left] <= 0
         HP_is_zero = self._is_hp_zero(sim, opponent_sim)
-        return terminal_step or HP_is_zero
+        return terminal_step #or HP_is_zero
     
     def _is_hp_zero(self, sim: Simulation, opponent_sim: Simulation) -> bool:
         # print(f"self HP: {sim[self.aircraft_HP]}, opponent HP: {sim[self.opponent_HP]}")
@@ -978,3 +978,124 @@ def GammaR(distance):
 
 def betaR(distance):
     return -2.5
+
+
+class TrackingInitTask(TrackingTask):
+    """
+    A task for opponent agent training.
+    It needs random input, and will give different mode of opponent aircraft.
+    """
+
+    def make_assessor(self, shaping_type: Shaping) -> assessors.AssessorImpl:
+        """
+        Create the assessor for the task.
+
+        :param shaping_type: the type of shaping to use
+        :return: the assessor
+        """
+        if Shaping.is_stage_type(shaping_type):
+            stage_number = int(shaping_type[5:])  # 提取数字部分
+            base_components = ()
+            shaping_components = ()
+
+            if stage_number == 1:
+                base_components = (
+                    # rewards.ScaledAsymptoticErrorComponent(
+                    #     name="small_action",
+                    #     prop=prp.aileron_cmd,
+                    #     state_variables=self.state_variables,
+                    #     is_potential_based=False,
+                    #     target=0.0,
+                    #     scaling_factor=0.5,
+                    #     cmp_scale=4.0,
+                    # ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_thrust",
+                        prop=prp.throttle_cmd,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.5,
+                        scaling_factor=0.1,
+                        cmp_scale=8.0,
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck1",
+                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck2",
+                        func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                )
+                shaping_components = (
+                    # rewards.SmoothingComponent(
+                    #     name="action_penalty",
+                    #     props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
+                    #     state_variables=self.state_variables,
+                    #     is_potential_based=True,
+                    #     list_length=10,
+                    #     cmp_scale=4.0,
+                    # ),
+                    # rewards.SmoothingComponent(
+                    #     name="altitude_contain",
+                    #     props=[prp.altitude_sl_ft],
+                    #     state_variables=self.state_variables,
+                    #     is_potential_based=True,
+                    #     list_length=20,
+                    #     cmp_scale=80000.0,
+                    # ),
+                )
+            elif stage_number == 2:
+                base_components = (
+                    rewards.UserDefinedComponent(
+                        name="deck1",
+                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck2",
+                        func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                )
+                shaping_components = ()
+            elif stage_number == 3:
+                base_components = (
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_roll",
+                        prop=prp.roll_rad,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck1",
+                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=1.0
+                    ),
+                )
+                shaping_components = ()
+            if not base_components and not shaping_components:
+                raise ValueError(f"Reward function of {shaping_type} is not defined")
+        else:
+            raise ValueError(f"Unsupported shaping type: {shaping_type} , you should use 'stage*' as shaping type")
+        
+        return assessors.AssessorImpl(
+            base_components,
+            shaping_components,
+            positive_rewards=self.positive_rewards,
+        )
