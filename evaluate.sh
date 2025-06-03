@@ -117,6 +117,6 @@ echo "结果将保存至: $eval_log_dir"
 echo ""
 
 # 调用Python脚本进行评估
-python -c "import sys; sys.path.append('.'); from src.evaluate import evaluate; evaluate('$latest_result', '$eval_log_dir', $n_episodes)"
+python -m src.evaluate --exp_path "$latest_result" --log_dir "$eval_log_dir" --n_episodes $n_episodes
 
 echo "评估完成"

@@ -1,5 +1,6 @@
 import os
 import torch
+import warnings
 import numpy as np
 import multiprocessing as mp
 from gymnasium.spaces import Box
@@ -34,7 +35,9 @@ class NNVecEnv(SubprocVecEnv):
             self, 
             env_fns, 
             start_method=None, 
-            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool1"""):
+            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool1""",
+            model_num: int = 0
+        ):
         # 为了减半observation space和action space，必须复制父类init代码
         self.waiting = False
         self.closed = False
@@ -60,10 +63,15 @@ class NNVecEnv(SubprocVecEnv):
         half_observation_space, half_action_space = self._get_space(observation_space, action_space)
         super(SubprocVecEnv, self).__init__(n_envs, half_observation_space, half_action_space)
 
-        # 处理敌机策略路径
+        self.model_num = model_num
+        self._choose_opponent_models(pool_roots, n_envs)
+        self.opponent_observation = None
+
+    def _choose_opponent_models(self, pool_roots: Union[str, List[str]], n_envs) -> None:
+        # 选择敌机策略
         self.opponent_model_roots = self._find_strategy_dirs(pool_roots)
         
-        # 加载所有敌机策略
+        # 加载选择的敌机策略
         self.opponent_models = []
         self.opponent_envs = []
         for root in self.opponent_model_roots:
@@ -72,9 +80,9 @@ class NNVecEnv(SubprocVecEnv):
             self.opponent_envs.append(env)
         
         # 为每个子环境分配一个随机的初始策略
-        self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=n_envs)
+        if len(self.opponent_models) > 0:
+            self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=n_envs)
         
-        self.opponent_observation = None
 
     def _get_space(self, observation_space: Box, action_space: Box) -> Tuple[Box, Box]:
         """设置环境的观察空间和动作空间"""
@@ -95,14 +103,29 @@ class NNVecEnv(SubprocVecEnv):
         return half_observation_space, half_action_space
     
 
-
     def _find_strategy_dirs(self, root_dir: str) -> List[str]:
-        """查找包含敌机策略的所有子目录"""
+        """
+        查找指定根目录下的所有策略目录
+        如果提供了加载模型的编号，则只加载指定编号的模型
+        如果编号为-1,则不加载模型
+        """
         strategy_dirs = []
         
         # 检查根目录是否存在
         if not os.path.exists(root_dir):
             raise ValueError(f"Root directory {root_dir} does not exist")
+        
+        # 如果提供了加载模型的编号，则只加载指定编号的模型
+        if self.model_num > 0:
+            model_path = os.path.join(root_dir, f"{self.model_num}")
+            if os.path.exists(model_path) and os.path.exists(os.path.join(model_path, "best_model.zip")):
+                strategy_dirs.append(model_path)
+                return strategy_dirs
+            else:
+                raise ValueError(f"Model path {model_path} does not exist or is invalid")
+        # 如果编号为-1,则不加载模型
+        elif self.model_num == -1:
+            return strategy_dirs
             
         # 遍历根目录下所有子目录
         for item in os.listdir(root_dir):
@@ -112,6 +135,14 @@ class NNVecEnv(SubprocVecEnv):
         
         if not strategy_dirs:
             raise ValueError(f"No valid strategy directories found in {root_dir}")
+        if len(strategy_dirs) > 10:
+            warnings.warn(
+                f"Found too many strategy directories ({len(strategy_dirs)}).\n"
+                f"Since each subprocess can only run one model, the number of models should be less than "
+                f"the number of CPU cores.\n"
+                f"For better training performance, it's recommended to keep the number of models "
+                f"below one-third of available CPU cores."
+            )
             
         # print(f"Found {len(strategy_dirs)} strategy directories: {strategy_dirs}")
         return strategy_dirs
@@ -139,6 +170,12 @@ class NNVecEnv(SubprocVecEnv):
     
     def _get_opponent_action(self, obs: np.ndarray) -> np.ndarray:
         """批量获取所有子环境的对手动作，每个子环境使用其对应的策略"""
+        if self.model_num == -1:
+            # 随机输入
+            actions = np.random.uniform(-1, 1, size=(obs.shape[0], 4))
+            actions[:, -1] = np.abs(actions[:, -1])
+            return actions
+        
         batch_size = obs.shape[0]
         actions = np.zeros((batch_size, self.opponent_models[0].policy.action_space.shape[0]))
         

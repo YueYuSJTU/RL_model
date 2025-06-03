@@ -176,6 +176,31 @@ esac
 echo "已选择渲染模式: $render_mode"
 echo ""
 
+# 添加选择对手模型类型
+echo "选择对手模型类型:"
+echo "[-1] 随机输入"
+echo "[0] 随机对手"
+echo "[1+] 对手池中对应编号的对手"
+read -p "请选择对手模型类型: " opponent_model_type
+
+# 验证输入
+if ! [[ "$opponent_model_type" =~ ^-?[0-9]+$ ]]; then
+    echo "错误：无效的选择"
+    exit 1
+fi
+
+# 设置脚本参数
+if [ "$opponent_model_type" -eq -1 ]; then
+    echo "已选择随机输入作为对手"
+else
+    if [ "$opponent_model_type" -eq 0 ]; then
+        echo "已选择随机对手"
+    else
+        echo "已选择对手池中的对手 #$opponent_model_type"
+    fi
+fi
+model_num_param="--model_num $opponent_model_type"
+
 # 调用Python脚本进行评估
 echo "开始评估..."
-python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode"
+python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" $model_num_param

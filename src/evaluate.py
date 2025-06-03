@@ -3,9 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import yaml
 from tqdm import tqdm  # 导入tqdm库
-if __name__ == "__main__":
-    from utils.yaml_import import add_path
-    add_path()
+import sys
+sys.path.insert(0, "/home/ubuntu/Workfile/RL/RL_model")
 from typing import Dict, Tuple
 from stable_baselines3 import PPO
 from src.environments.make_env import create_env
@@ -54,6 +53,8 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
 
     # 记录评估结果
     wins = 0
+    losses = 0
+    draws = 0
     win_steps = []
     
     # 运行蒙特卡洛模拟，使用tqdm显示进度条
@@ -68,16 +69,26 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
             if terminated:
                 episode_done = True
                 env_info = info[0].get("env_info", {})
-                if env_info.get("win", False):
+                win_status = env_info.get("win", 0)
+                
+                if win_status == 1:  # 主控胜利
                     wins += 1
                     win_steps.append(env_info.get("steps_used", 0))
+                elif win_status == 0:  # 平局
+                    draws += 1
+                elif win_status == -1:  # 敌机胜利
+                    losses += 1
     
     # 计算统计数据
     win_rate = wins / n_episodes
+    draw_rate = draws / n_episodes
+    loss_rate = losses / n_episodes
     avg_win_time = np.mean(win_steps) if win_steps else 0
     
     print(f"\n评估结果:")
     print(f"胜率: {win_rate:.2%}")
+    print(f"平局率: {draw_rate:.2%}")
+    print(f"失败率: {loss_rate:.2%}")
     print(f"平均获胜时间: {avg_win_time:.2f} 步")
     
     # 创建可视化图表
@@ -85,12 +96,12 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
     
     # 饼图：胜率
     plt.subplot(1, 2, 1)
-    labels = ['Win', 'Fail']  # 使用英文标签避免字体问题
-    sizes = [wins, n_episodes - wins]
-    colors = ['#66b3ff', '#ff9999']
+    labels = ['Win', 'Draw', 'Loss']  # 使用英文标签避免字体问题
+    sizes = [wins, draws, losses]
+    colors = ['#66b3ff', '#ffcc99', '#ff9999']
     plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
     plt.axis('equal')
-    plt.title('Win Rate')
+    plt.title('Battle Outcomes')
     
     # 条形图：获胜时间分布
     plt.subplot(1, 2, 2)
@@ -112,7 +123,11 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
     with open(os.path.join(log_dir, 'evaluation_summary.txt'), 'w') as f:
         f.write(f"总模拟次数: {n_episodes}\n")
         f.write(f"获胜次数: {wins}\n")
+        f.write(f"平局次数: {draws}\n")
+        f.write(f"失败次数: {losses}\n")
         f.write(f"胜率: {win_rate:.2%}\n")
+        f.write(f"平局率: {draw_rate:.2%}\n")
+        f.write(f"失败率: {loss_rate:.2%}\n")
         f.write(f"平均获胜时间: {avg_win_time:.2f} 步\n")
     
     # 保存详细数据
@@ -123,6 +138,19 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
     return win_rate, avg_win_time
 
 if __name__ == "__main__":
-    # 示例使用
-    evaluate("./experiments/20250428_183617/stage2/20250428_184017_TrackingTask_ppo_1layer1",
-              "./experiments/20250428_183617", 500)
+    import argparse
+    
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(description='评估强化学习模型性能')
+    parser.add_argument('--exp_path', type=str, required=True, 
+                        help='实验路径，包含模型和环境配置')
+    parser.add_argument('--log_dir', type=str, required=True, 
+                        help='结果保存路径')
+    parser.add_argument('--n_episodes', type=int, default=500, 
+                        help='蒙特卡洛模拟次数（默认：500）')
+    
+    # 解析命令行参数
+    args = parser.parse_args()
+    
+    # 调用评估函数
+    evaluate(args.exp_path, args.log_dir, args.n_episodes)

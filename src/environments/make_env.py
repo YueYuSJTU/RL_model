@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Callable
+from typing import Optional, List, Tuple, Callable, Any
 import gymnasium as gym
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
@@ -15,7 +15,12 @@ env_dir = os.path.join(RL_dir, "jsbgym")
 sys.path.append(env_dir)
 import jsbgym_m             # type: ignore
 
-def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> DummyVecEnv:
+def create_env(
+        env_config: dict, 
+        num_cpu: int = 1, 
+        training: bool = True,
+        vec_env_kwargs: Optional[dict[str, Any]] = None,
+    ) -> DummyVecEnv:
     """创建标准化环境"""
     # 构建环境ID
     plane = env_config["plane"]
@@ -36,6 +41,7 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
             n_envs=num_cpu, 
             wrapper_kwargs={"wrappers": wrappers}, 
             vec_env_cls=NNVecEnv, 
+            vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}
         )
     else:
@@ -46,6 +52,7 @@ def create_env(env_config: dict, num_cpu: int = 1, training: bool = True) -> Dum
             n_envs=1, 
             wrapper_kwargs={"wrappers": wrappers}, 
             vec_env_cls=NNVecEnv,
+            vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}
         )
 

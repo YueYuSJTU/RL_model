@@ -9,7 +9,7 @@ from src.environments.make_env import create_env
 from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def show(exp_path: str, render_mode: str = "human", random_input: bool = False):
+def show(exp_path: str, render_mode: str = "human", random_input: bool = False, model_num: int = 0) -> None:
     # 加载实验配置
     env_cfg = load_config(os.path.join(exp_path, "env_config.yaml"))
     agent_cfg = load_config(os.path.join(exp_path, "agent_config.yaml"))
@@ -19,7 +19,7 @@ def show(exp_path: str, render_mode: str = "human", random_input: bool = False):
     env_cfg["use_vec_normalize"] = False
     
     # 创建评估环境
-    vec_env = create_env(env_cfg, training=False)
+    vec_env = create_env(env_cfg, training=False, vec_env_kwargs={"model_num": model_num})
     vec_env = VecNormalize.load(
         os.path.join(exp_path, "final_train_env.pkl"), 
         vec_env
@@ -62,5 +62,6 @@ if __name__ == "__main__":
     parser.add_argument("--exp_path", type=str, required=True)
     parser.add_argument("--render_mode", type=str, default="human")
     parser.add_argument("--random_input", type=bool, default=False)
+    parser.add_argument("--model_num", type=int, default=0, help="Model number for multi-agent environments")
     args = parser.parse_args()
     show(args.exp_path, args.render_mode, args.random_input)
