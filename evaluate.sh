@@ -106,6 +106,10 @@ echo ""
 read -p "请输入评估次数 [默认: 500]: " n_episodes
 n_episodes=${n_episodes:-500}  # 如果用户未输入，则使用默认值
 
+# 询问用户对手池
+read -p "请输入对手池的名称 [Eg: pool1]: " opponent_pool
+opponent_pool=${opponent_pool:-pool1}  # 如果用户未输入，则使用默认值
+
 # 评估结果保存在与stage同级的文件夹
 eval_log_dir="$selected_exp"
 
@@ -117,6 +121,6 @@ echo "结果将保存至: $eval_log_dir"
 echo ""
 
 # 调用Python脚本进行评估
-python -m src.evaluate --exp_path "$latest_result" --log_dir "$eval_log_dir" --n_episodes $n_episodes
+python -m src.evaluate --exp_path "$latest_result" --n_episodes $n_episodes --opponent_pool "$opponent_pool"
 
 echo "评估完成"

@@ -11,7 +11,7 @@ from src.environments.make_env import create_env
 from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float, float]:
+def evaluate(exp_path: str, pool_name: str, n_episodes: int = 500) -> Tuple[float, float]:
     """
     对环境进行蒙特卡洛仿真评估
     
@@ -25,7 +25,7 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
         avg_win_time: 获胜平均时间
     """
     # 创建保存目录
-    os.makedirs(log_dir, exist_ok=True)
+    log_dir = exp_path
     
     # 加载实验配置
     env_cfg = load_config(os.path.join(exp_path, "env_config.yaml"))
@@ -36,11 +36,14 @@ def evaluate(exp_path: str, log_dir: str, n_episodes: int = 500) -> Tuple[float,
     env_cfg["use_vec_normalize"] = False
     
     # 创建评估环境
+    vec_env_kwargs = {
+        "pool_roots": os.join("/home/ubuntu/Workfile/RL/RL_model/opponent_pool", pool_name),
+    }
     vec_env = create_env(env_cfg, training=False)
-    vec_env = VecNormalize.load(
-        os.path.join(exp_path, "final_train_env.pkl"), 
-        vec_env
-    )
+    # vec_env = VecNormalize.load(
+    #     os.path.join(exp_path, "final_train_env.pkl"), 
+    #     vec_env
+    # )
     vec_env.training = False
     vec_env.norm_reward = False
 
@@ -144,8 +147,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='评估强化学习模型性能')
     parser.add_argument('--exp_path', type=str, required=True, 
                         help='实验路径，包含模型和环境配置')
-    parser.add_argument('--log_dir', type=str, required=True, 
-                        help='结果保存路径')
+    parser.add_argument('--pool_name', type=str, required=True, 
+                        help='对手池名称')
     parser.add_argument('--n_episodes', type=int, default=500, 
                         help='蒙特卡洛模拟次数（默认：500）')
     
@@ -153,4 +156,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # 调用评估函数
-    evaluate(args.exp_path, args.log_dir, args.n_episodes)
+    evaluate(args.exp_path, args.pool_name, args.n_episodes)

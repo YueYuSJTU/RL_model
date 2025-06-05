@@ -9,9 +9,10 @@ from stable_baselines3.common.callbacks import EvalCallback, ProgressBarCallback
 from src.environments.make_env import create_env
 from src.agents.make_agent import creat_agent
 from src.utils.serialization import save_config
+from src.evaluate_pool import evaluate_pool, show_evaluate_results
 
 
-def create_init_pool(pool_name: str = "pool1", opponent_num: int = 3) -> None:
+def create_init_pool(pool_name: str = "pool2", opponent_num: int = 5) -> None:
     """
     创建初始的对手模型池。
 
@@ -21,7 +22,7 @@ def create_init_pool(pool_name: str = "pool1", opponent_num: int = 3) -> None:
     所有的对手模型共用训练参数
     Args:
         pool_name: 对手模型池的名称
-        opponent_num: 对手数量
+        opponent_num: 对手数量，请保证与TrackingInitTask环境中的stage数量一致
     """
     with open("configs/create_init_pool_config.yaml", encoding="utf-8") as f:
         init_pool_cfg = yaml.safe_load(f)
@@ -56,8 +57,8 @@ def create_init_pool(pool_name: str = "pool1", opponent_num: int = 3) -> None:
         save_config(env_cfg, log_path, "env_config.yaml")
 
         # 创建环境
-        train_env = create_env(env_cfg, training=True, num_cpu=init_pool_cfg["num_cpu"])
-        eval_env = create_env(env_cfg, training=False)
+        train_env = create_env(env_cfg, training=True, num_cpu=init_pool_cfg["num_cpu"], vec_env_kwargs={"model_num": -1})
+        eval_env = create_env(env_cfg, training=False, vec_env_kwargs={"model_num": -1})
         eval_env.training = False
         eval_env.norm_reward = False
 
@@ -90,7 +91,10 @@ def create_init_pool(pool_name: str = "pool1", opponent_num: int = 3) -> None:
         # 保存最终模型和环境
         # model.save(os.path.join(log_path, "final_model"))
         train_env.save(os.path.join(log_path, "final_train_env.pkl"))
+    
+    evaluate_pool(pool_path=stage_path, n_episodes=30)
+    show_evaluate_results(stage_path)
 
 
 if __name__ == "__main__":
-    create_init_pool(pool_name="pool1", opponent_num=3)
+    create_init_pool()

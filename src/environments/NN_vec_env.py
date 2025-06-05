@@ -35,7 +35,7 @@ class NNVecEnv(SubprocVecEnv):
             self, 
             env_fns, 
             start_method=None, 
-            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool1""",
+            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool2""",
             model_num: int = 0
         ):
         # 为了减半observation space和action space，必须复制父类init代码
@@ -73,11 +73,11 @@ class NNVecEnv(SubprocVecEnv):
         
         # 加载选择的敌机策略
         self.opponent_models = []
-        self.opponent_envs = []
+        # self.opponent_envs = []
         for root in self.opponent_model_roots:
-            model, env = self._load_opponent_model(root)
+            model = self._load_opponent_model(root)
             self.opponent_models.append(model)
-            self.opponent_envs.append(env)
+            # self.opponent_envs.append(env)
         
         # 为每个子环境分配一个随机的初始策略
         if len(self.opponent_models) > 0:
@@ -152,21 +152,21 @@ class NNVecEnv(SubprocVecEnv):
         import pickle
 
         model_file = os.path.join(model_path, "best_model.zip")
-        env_file = os.path.join(model_path, "final_train_env.pkl")
+        # env_file = os.path.join(model_path, "final_train_env.pkl")
 
         if not os.path.exists(model_file):
             raise ValueError(f"Model file {model_file} does not exist.")
-        if not os.path.exists(env_file):
-            raise ValueError(f"VecNormalize file {env_file} does not exist.")
+        # if not os.path.exists(env_file):
+        #     raise ValueError(f"VecNormalize file {env_file} does not exist.")
         
         # 加载模型和标准化参数
         model = PPO.load(model_file, device="cuda")
         
-        # 直接从pkl文件加载标准化参数
-        with open(env_file, "rb") as f:
-            vec_env = pickle.load(f)
+        # # 直接从pkl文件加载标准化参数
+        # with open(env_file, "rb") as f:
+        #     vec_env = pickle.load(f)
     
-        return model, vec_env
+        return model
     
     def _get_opponent_action(self, obs: np.ndarray) -> np.ndarray:
         """批量获取所有子环境的对手动作，每个子环境使用其对应的策略"""
@@ -188,17 +188,17 @@ class NNVecEnv(SubprocVecEnv):
                 
             # 获取当前策略对应的模型和标准化环境
             model = self.opponent_models[strategy_idx]
-            vec_env = self.opponent_envs[strategy_idx]
+            # vec_env = self.opponent_envs[strategy_idx]
             
             # 提取这些环境的观察值
             strategy_obs = obs[env_indices]
             
             # 标准化观察值
-            normalized_obs = vec_env.normalize_obs(strategy_obs)
+            # normalized_obs = vec_env.normalize_obs(strategy_obs)
             
             # 预测动作
             with torch.no_grad():
-                strategy_actions, _ = model.predict(normalized_obs)
+                strategy_actions, _ = model.predict(strategy_obs)
             
             # 将动作放回对应位置
             actions[env_indices] = strategy_actions
@@ -240,7 +240,8 @@ class NNVecEnv(SubprocVecEnv):
     def reset(self) -> np.ndarray:
         """重置所有环境，并为每个环境随机选择新的敌机策略"""
         # 为每个环境随机选择新的策略
-        self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=self.num_envs)
+        if self.model_num >= 0:
+            self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=self.num_envs)
         
         raw_observation = super().reset()
         self.opponent_observation = self._get_observation(raw_observation, "opponent").copy()
