@@ -512,8 +512,8 @@ class TrackingTask(FlightTask):
         )
     
     def get_state_space(self) -> gym.Space:
-        state_lows = np.array([state_var.min for state_var in self.state_variables])
-        state_highs = np.array([state_var.max for state_var in self.state_variables])
+        state_lows = np.array([-1 for _ in self.state_variables])
+        state_highs = np.array([1 for _ in self.state_variables])
         
         # 将观测空间扩展到原来的两倍
         doubled_state_lows = np.concatenate([state_lows, state_lows])
@@ -574,7 +574,18 @@ class TrackingTask(FlightTask):
         env_info = None
         if terminated:
             reward = self._reward_terminal_override(reward, sim, opponent_sim)
-            win = opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 1
+            if opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 5:
+                # 成功击落
+                win = 1
+            elif sim[self.aircraft_HP] <= 0 :#and sim[prp.altitude_sl_ft] > 1:
+                # 自机坠毁或被击落
+                win = -1
+            elif opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] <= 5:
+                # 对方坠毁
+                win = 0.5
+            else:
+                # 平局
+                win = 0
             # print(f"debug: steps_left: {sim[self.steps_left]}, win: {win}")
             env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
         if self.debug:
@@ -583,9 +594,42 @@ class TrackingTask(FlightTask):
         self.last_state = state
         info = {"reward": reward_components, "env_info": env_info}
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
+        observation = self.observation_normalization(observation)
 
         return observation, reward.agent_reward(), terminated, False, info
 
+    def observation_normalization(self, observation: np.ndarray) -> np.ndarray:
+        """
+        Normalize observation values to the range [-1, 1] based on BoundedProperty min and max values.
+        
+        :param observation: Raw observation vector
+        :return: Normalized observation vector
+        """
+        # Get min and max values for all state variables
+        mins = np.array([prop.min for prop in self.state_variables])
+        maxs = np.array([prop.max for prop in self.state_variables])
+        
+        # Handle the doubled observation space (self and opponent aircraft)
+        if len(observation) == 2 * len(self.state_variables):
+            mins = np.concatenate([mins, mins])
+            maxs = np.concatenate([maxs, maxs])
+        
+        # Replace infinite values with large but finite values
+        finite_max = 1e4  # A large but finite value
+        mins = np.where(np.isneginf(mins), -finite_max, mins)
+        maxs = np.where(np.isinf(maxs), finite_max, maxs)
+        
+        # Calculate ranges, avoiding division by zero
+        ranges = maxs - mins
+        ranges = np.where(ranges > 1e-10, ranges, 1e-10)
+        
+        # Normalize to [-1, 1]
+        normalized_obs = 2 * (observation - mins) / ranges - 1
+        
+        # Clip values to ensure they stay in the range [-1, 1]
+        normalized_obs = np.clip(normalized_obs, -1.0, 1.0)
+        
+        return normalized_obs
 
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
@@ -746,45 +790,6 @@ class TrackingTask(FlightTask):
         else:
             raise ValueError("Unsupported opponent model: {}".format(self.opponent))
 
-        # oppo_position = prp.Vector3(
-        #     sim[self.oppo_x_ft],
-        #     sim[self.oppo_y_ft],
-        #     sim[self.oppo_altitude_sl_ft]
-        # )
-        # own_position = prp.Vector3(
-        #     sim[self.ned_Xposition_ft],
-        #     sim[self.ned_Yposition_ft],
-        #     sim[prp.altitude_sl_ft]
-        # )
-
-        # sim[self.oppo_bearing_pointMass_rad] = prp.Vector3.cal_angle(
-        #     (own_position-oppo_position).project_to_plane("xy"), 
-        #     prp.Vector3(x=1, y=0, z=0)
-        # )
-
-        # dlt_x, dlt_y, dlt_z = (own_position-oppo_position).get_xyz()
-        # sim[self.oppo_elevation_pointMass_rad] = math.atan2(dlt_z, math.sqrt(dlt_x**2+dlt_y**2))
-        # R = Quaternion(0, dlt_x, dlt_y, -dlt_z)
-        # # Q = Quaternion(axis=[0,0,1], radians=math.radians(oppo_state["heading_deg"]))
-        # Q = prp.Eular2Quaternion(
-        #     psi=math.radians(sim[self.oppo_heading_deg]),
-        #     theta=sim[self.oppo_pitch_rad],
-        #     phi=sim[self.oppo_roll_rad]
-        # )
-        # Rb = Q.inverse * R * Q
-        # rbx, rby, rbz = Rb.vector
-        # sim[self.oppo_track_angle_rad] = prp.Vector3.cal_angle(
-        #     prp.Vector3(rbx, rby, rbz),
-        #     prp.Vector3(1, 0, 0)
-        # )
-        # # sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
-        # #     prp.Vector3(rbx, rby, rbz),
-        # #     prp.Vector3(-1, 0, 0)
-        # # )
-
-        # sim[self.oppo_bearing_accountingRollPitch_rad] = math.atan2(rby, rbx)
-        # sim[self.oppo_elevation_accountingRollPitch_rad] = math.atan2(rbz, math.sqrt(rbx**2+rby**2))
-
         
     def _update_extra_properties(self, sim: Simulation, opponent_sim: Simulation) -> None:
         """
@@ -833,20 +838,6 @@ class TrackingTask(FlightTask):
             prp.Vector3(1, 0, 0)
         )
 
-        # R_ = Quaternion(0, -dlt_x, -dlt_y, dlt_z)
-        # Q_ = prp.Eular2Quaternion(
-        #     psi=math.radians(opponent_sim[prp.heading_deg]),
-        #     theta=opponent_sim[prp.pitch_rad],
-        #     phi=opponent_sim[prp.roll_rad]
-        # )
-        # Rb_ = Q_.inverse * R_ * Q_
-        # rbx_, rby_, rbz_ = Rb_.vector
-        # sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
-        #     prp.Vector3(rbx_, rby_, rbz_),
-        #     prp.Vector3(-1, 0, 0)
-        # )
-
-
         opponent_sim[self.adverse_angle_rad] = prp.Vector3.cal_angle(
             prp.Vector3(rbx, rby, rbz),
             prp.Vector3(-1, 0, 0)
@@ -890,7 +881,7 @@ class TrackingTask(FlightTask):
         # terminate when time >= max, but use math.isclose() for float equality test
         terminal_step = sim[self.steps_left] <= 0
         HP_is_zero = self._is_hp_zero(sim, opponent_sim)
-        return terminal_step #or HP_is_zero
+        return terminal_step or HP_is_zero
     
     def _is_hp_zero(self, sim: Simulation, opponent_sim: Simulation) -> bool:
         # print(f"self HP: {sim[self.aircraft_HP]}, opponent HP: {sim[self.opponent_HP]}")
@@ -899,8 +890,11 @@ class TrackingTask(FlightTask):
     def _reward_terminal_override(
         self, reward: rewards.Reward, sim: Simulation, opponent_sim: Simulation
     ) -> rewards.Reward:
-        add_reward = (self.HP - opponent_sim[self.aircraft_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
-        if opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 1:
+        if sim[prp.altitude_sl_ft] > 5 and opponent_sim[prp.altitude_sl_ft] > 5:
+            add_reward = (self.HP - opponent_sim[self.aircraft_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
+        else:
+            add_reward = 0.0
+        if opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 5:
             add_reward += sim[self.steps_left] * 3.7  # TODO:规范化奖励函数大小
         if sim[self.aircraft_HP] <= 0:
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
@@ -909,7 +903,6 @@ class TrackingTask(FlightTask):
         # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward
 
-
     def observe_first_state(self, sim: Simulation, opponent_sim: Simulation=None) -> np.ndarray:
         self._new_episode_init(sim, opponent_sim)
         self._update_custom_properties(sim, opponent_sim)
@@ -917,6 +910,7 @@ class TrackingTask(FlightTask):
         self.last_state = state
         opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
+        observation = self.observation_normalization(observation)
         return observation
 
     def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
@@ -1023,14 +1017,14 @@ class TrackingInitTask(TrackingTask):
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
                         state_variables=self.state_variables,
-                        cmp_scale=1.0
+                        cmp_scale=2.0
                     ),
                     rewards.UserDefinedComponent(
                         name="deck2",
                         func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
                         props=(prp.altitude_sl_ft,),
                         state_variables=self.state_variables,
-                        cmp_scale=1.0
+                        cmp_scale=2.0
                     ),
                 )
                 shaping_components = (
@@ -1053,19 +1047,28 @@ class TrackingInitTask(TrackingTask):
                 )
             elif stage_number == 2:
                 base_components = (
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_action",
+                        prop=prp.aileron_cmd,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    ),
                     rewards.UserDefinedComponent(
                         name="deck1",
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
                         state_variables=self.state_variables,
-                        cmp_scale=1.0
+                        cmp_scale=2.0
                     ),
                     rewards.UserDefinedComponent(
                         name="deck2",
                         func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
                         props=(prp.altitude_sl_ft,),
                         state_variables=self.state_variables,
-                        cmp_scale=1.0
+                        cmp_scale=2.0
                     ),
                 )
                 shaping_components = ()
@@ -1085,10 +1088,102 @@ class TrackingInitTask(TrackingTask):
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
                         state_variables=self.state_variables,
-                        cmp_scale=1.0
+                        cmp_scale=3.0
                     ),
                 )
                 shaping_components = ()
+            elif stage_number == 4:
+                base_components = (
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_roll",
+                        prop=prp.roll_rad,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck1",
+                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=3.0
+                    ),
+                )
+                shaping_components = (
+                    rewards.SmoothingComponent(
+                        name="action_penalty",
+                        props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
+                        state_variables=self.state_variables,
+                        is_potential_based=True,
+                        list_length=10,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.SmoothingComponent(
+                        name="altitude_contain",
+                        props=[prp.altitude_sl_ft],
+                        state_variables=self.state_variables,
+                        is_potential_based=True,
+                        list_length=20,
+                        cmp_scale=20000.0,
+                    ),
+                )
+            elif stage_number == 5:
+                base_components = (
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_action",
+                        prop=prp.aileron_cmd,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_thrust",
+                        prop=prp.throttle_cmd,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.4,
+                        scaling_factor=0.1,
+                        cmp_scale=8.0,
+                    ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="small_roll",
+                        prop=prp.roll_rad,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=0.0,
+                        scaling_factor=0.5,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.UserDefinedComponent(
+                        name="deck1",
+                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
+                        props=(prp.altitude_sl_ft,),
+                        state_variables=self.state_variables,
+                        cmp_scale=3.0
+                    ),
+                )
+                shaping_components = (
+                    rewards.SmoothingComponent(
+                        name="action_penalty",
+                        props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
+                        state_variables=self.state_variables,
+                        is_potential_based=True,
+                        list_length=10,
+                        cmp_scale=4.0,
+                    ),
+                    rewards.SmoothingComponent(
+                        name="altitude_contain",
+                        props=[prp.altitude_sl_ft],
+                        state_variables=self.state_variables,
+                        is_potential_based=True,
+                        list_length=20,
+                        cmp_scale=20000.0,
+                    ),
+                )
             if not base_components and not shaping_components:
                 raise ValueError(f"Reward function of {shaping_type} is not defined")
         else:
@@ -1099,3 +1194,16 @@ class TrackingInitTask(TrackingTask):
             shaping_components,
             positive_rewards=self.positive_rewards,
         )
+    
+    def _is_hp_zero(self, sim: Simulation, opponent_sim: Simulation) -> bool:
+        return False  # 在TrackingInitTask中不考虑HP为0的情况
+    
+    def _reward_terminal_override(
+        self, reward: rewards.Reward, sim: Simulation, opponent_sim: Simulation
+    ) -> rewards.Reward:
+        # if sim[self.aircraft_HP] <= 1:
+        #     add_reward -= sim[self.steps_left] #/ self.steps_left.max
+        add_reward = 0
+        reward.set_additional_reward(add_reward)
+        # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
+        return reward
