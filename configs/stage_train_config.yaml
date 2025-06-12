@@ -14,7 +14,7 @@ stage2:
   stage_num: 2
   agent: ppo_1layer1
   env: f16_tracking_stage2
-  total_timesteps: 165000_000
+  total_timesteps: 105000_000
   eval_freq: 10000
   log_root: "./experiments"
   seed: 42

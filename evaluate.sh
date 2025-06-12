@@ -58,18 +58,31 @@ if [ ${#stages[@]} -eq 0 ]; then
     exit 1
 fi
 
-# 找到最新的stage（按文件夹修改时间排序）
+# 找到编号最大的stage（按stage后面的数字排序）
 latest_stage=""
-latest_time=0
+largest_num=-1  # 从-1开始，确保至少有一个有效数字会被选择
 
 for stage in "${stages[@]}"; do
-    # 获取文件夹的最后修改时间
-    mod_time=$(stat -c %Y "$stage")
-    if (( mod_time > latest_time )); then
-        latest_time=$mod_time
-        latest_stage=$stage
+    # 获取文件夹名
+    stage_name=$(basename "$stage")
+    
+    # 提取stage后面的数字部分
+    if [[ $stage_name =~ ^stage([0-9]+) ]]; then
+        stage_num=${BASH_REMATCH[1]}
+        
+        # 如果这个数字更大，则更新最大值
+        if (( stage_num > largest_num )); then
+            largest_num=$stage_num
+            latest_stage=$stage
+        fi
     fi
 done
+
+# 确保找到了有效的stage
+if [ -z "$latest_stage" ]; then
+    echo "错误：无法从stage文件夹名中提取数字，无法确定最新stage"
+    exit 1
+fi
 
 latest_stage_name=$(basename "$latest_stage")
 echo "自动选择了最新的stage: $latest_stage_name"
@@ -109,6 +122,7 @@ n_episodes=${n_episodes:-500}  # 如果用户未输入，则使用默认值
 # 询问用户对手池
 read -p "请输入对手池的名称 [Eg: pool1]: " opponent_pool
 opponent_pool=${opponent_pool:-pool1}  # 如果用户未输入，则使用默认值
+opponent_pool="/home/ubuntu/Workfile/RL/RL_model/opponent_pool/$opponent_pool"
 
 # 评估结果保存在与stage同级的文件夹
 eval_log_dir="$selected_exp"
@@ -121,6 +135,6 @@ echo "结果将保存至: $eval_log_dir"
 echo ""
 
 # 调用Python脚本进行评估
-python -m src.evaluate --exp_path "$latest_result" --n_episodes $n_episodes --opponent_pool "$opponent_pool"
+python -m src.evaluate --exp_path "$latest_result" --n_episodes $n_episodes --pool_path "$opponent_pool"
 
 echo "评估完成"
