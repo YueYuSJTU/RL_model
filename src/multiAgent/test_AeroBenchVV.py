@@ -5,8 +5,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path))
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 import aerobench            # type: ignore
-sys.path.append("/home/ubuntu/Workfile/RL/jsbgym")
-import jsbgym_m             # type: ignore
+# sys.path.append("/home/ubuntu/Workfile/RL/jsbgym")
+import jsbgym_m.jsbgym_m             # type: ignore
 import gymnasium as gym
 import numpy as np
 
