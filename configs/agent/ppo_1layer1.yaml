@@ -4,7 +4,7 @@ learning_rate: 1.0e-4
 device: "cuda"
 verbose: 1
 n_steps: 2048
-batch_size: 256
+batch_size: 128
 n_epochs: 10
 gamma: 0.99
 gae_lambda: 0.95

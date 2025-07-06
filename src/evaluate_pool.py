@@ -250,9 +250,9 @@ def show_evaluate_results(log_dir: str) -> None:
         print(f"Warning: No model directories found in {log_dir}")
         return
     
-    # Store failure rates for each model
+    # Store win rates for each model
     model_names = []
-    failure_rates = []
+    win_rates = []
     
     for model_dir in model_dirs:
         model_path = os.path.join(log_dir, model_dir)
@@ -267,12 +267,12 @@ def show_evaluate_results(log_dir: str) -> None:
             # Load results
             results = np.load(results_file, allow_pickle=True).item()
             
-            # Calculate average failure rate
-            avg_loss_rate = np.mean([r["loss_rate"] for r in results.values()])
+            # Calculate average win rate
+            avg_win_rate = np.mean([r["win_rate"] for r in results.values()])
             
             # Store results
             model_names.append(model_dir)
-            failure_rates.append(avg_loss_rate)
+            win_rates.append(avg_win_rate)
         except Exception as e:
             print(f"Error processing model {model_dir}: {e}")
     
@@ -283,20 +283,20 @@ def show_evaluate_results(log_dir: str) -> None:
     # Sort model names numerically
     sorted_indices = sorted(range(len(model_names)), key=lambda i: int(model_names[i]))
     model_names = [model_names[i] for i in sorted_indices]
-    failure_rates = [failure_rates[i] for i in sorted_indices]
+    win_rates = [win_rates[i] for i in sorted_indices]
     
     # Create bar chart
     plt.figure(figsize=(12, 6))
-    bars = plt.bar(model_names, failure_rates)
+    bars = plt.bar(model_names, win_rates)
     
     # Add title and labels
-    plt.title('Average Failure Rate Comparison Between Models')
+    plt.title('Average Win Rate Comparison Between Models')
     plt.xlabel('Model')
-    plt.ylabel('Average Failure Rate')
+    plt.ylabel('Average Win Rate')
     plt.xticks(rotation=45, ha='right')
     
     # Display values on each bar
-    for bar, rate in zip(bars, failure_rates):
+    for bar, rate in zip(bars, win_rates):
         plt.text(bar.get_x() + bar.get_width()/2, 
                     bar.get_height() + 0.01, 
                     f'{rate:.2%}', 
@@ -306,11 +306,11 @@ def show_evaluate_results(log_dir: str) -> None:
     plt.tight_layout()
     
     # Save chart
-    output_file = os.path.join(log_dir, 'failure_rates.png')
+    output_file = os.path.join(log_dir, 'win_rates.png')
     plt.savefig(output_file)
     plt.close()
     
-    print(f"Failure rate bar chart saved to {output_file}")
+    print(f"Win rate bar chart saved to {output_file}")
 
 
 if __name__ == "__main__":
