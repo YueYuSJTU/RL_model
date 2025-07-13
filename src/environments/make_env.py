@@ -7,13 +7,13 @@ from src.utils.yaml_import import import_class
 from src.environments.NN_vec_env import NNVecEnv
 import os
 import sys
-# 将项目根目录添加到sys.path（使用相对路径）
-current_file_path = os.path.abspath(__file__)
-RL_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_path))))  # RL目录
-env_dir = os.path.join(RL_dir, "jsbgym")
-# print(env_dir)
-sys.path.append(env_dir)
-import jsbgym_m             # type: ignore
+# # 将项目根目录添加到sys.path（使用相对路径）
+# current_file_path = os.path.abspath(__file__)
+# RL_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_path))))  # RL目录
+# env_dir = os.path.join(RL_dir, "jsbgym")
+# # print(env_dir)
+# sys.path.append(env_dir)
+import jsb_env.jsbgym_m             # type: ignore
 
 def create_env(
         env_config: dict, 

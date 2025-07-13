@@ -1,5 +1,11 @@
 import gymnasium as gym
 import enum
+import os
+import sys
+current_file_path = os.path.abspath(__file__)
+parent_dir = os.path.join(os.path.dirname(current_file_path), "..")
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 from jsbgym_m.tasks import Task, HeadingControlTask, TurnHeadingControlTask, Shaping
 from jsbgym_m.task_tracking import TrackingTask, Opponent
 from jsbgym_m.aircraft import Aircraft, c172, f16
@@ -22,6 +28,10 @@ for env_id, (
     shaping,
     enable_flightgear,
 ) in utils.get_env_id_kwargs_map().items():
+    # 添加检查，避免重复注册环境
+    if env_id in gym.envs.registry:
+        continue
+        
     if issubclass(task, TrackingTask):
         # opponent = task("stage1",1,f16).opponent
         if enable_flightgear:
