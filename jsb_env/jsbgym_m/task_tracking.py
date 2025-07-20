@@ -491,14 +491,14 @@ class TrackingTask(FlightTask):
                     #     state_variables=self.state_variables,
                     #     cmp_scale=1.0
                     # ),
-                    rewards.UserDefinedComponent(
-                        name="small action",
-                        func=lambda aileron, elevator:
-                            -1*abs(aileron) - abs(elevator),
-                        props=(prp.aileron_cmd, prp.elevator_cmd),
-                        state_variables=self.state_variables,
-                        cmp_scale=1.0
-                    )
+                    # rewards.UserDefinedComponent(
+                    #     name="small action",
+                    #     func=lambda aileron, elevator:
+                    #         -1*abs(aileron) - abs(elevator),
+                    #     props=(prp.aileron_cmd, prp.elevator_cmd),
+                    #     state_variables=self.state_variables,
+                    #     cmp_scale=1.0
+                    # )
                 )
             if not base_components and not shaping_components:
                 raise ValueError(f"Reward function of {shaping_type} is not defined")

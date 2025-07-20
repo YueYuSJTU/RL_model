@@ -133,7 +133,7 @@ def train(stage_path: str = ""):
 
     # 在训练结束后查找最新的训练结果并进行评估
     latest_result = find_latest_training_result(stage_path)
-    evaluate(latest_result, "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool2", n_episodes=1000)
+    evaluate(latest_result, "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3", n_episodes=1000)
 
 if __name__ == "__main__":
     train()

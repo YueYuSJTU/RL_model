@@ -35,7 +35,7 @@ class NNVecEnv(SubprocVecEnv):
             self, 
             env_fns, 
             start_method=None, 
-            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool2""",
+            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3""",
             model_num: int = 0
         ):
         # 为了减半observation space和action space，必须复制父类init代码
