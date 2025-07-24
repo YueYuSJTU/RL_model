@@ -3,7 +3,7 @@ import numpy as np
 from jsbgym_m.tasks import Shaping, HeadingControlTask
 from jsbgym_m.task_tracking import TrackingTask
 from jsbgym_m.simulation import Simulation
-from jsbgym_m.visualiser import FigureVisualiser, FlightGearVisualiser, GraphVisualiser
+from jsbgym_m.visualiser import FigureVisualiser, FlightGearVisualiser, GraphVisualiser, MultiplayerFlightGearVisualiser
 from jsbgym_m.aircraft import Aircraft, c172, f16
 from typing import Optional, Type, Tuple, Dict
 import warnings
@@ -303,14 +303,30 @@ class DoubleJsbSimEnv(JsbSimEnv):
         # 新增对手飞机参数
         self.opponent_aircraft = opponent_aircraft
         self.opponent_sim: Simulation = None
+        self.flightgear_visualiser: MultiplayerFlightGearVisualiser = None
+
+    def _init_new_sim(self, dt, aircraft, initial_conditions, output_file: str=None):
+        if output_file is None:
+            return super()._init_new_sim(dt, aircraft, initial_conditions)
+        else:
+            return Simulation(
+                sim_frequency_hz=dt, 
+                aircraft=aircraft, 
+                init_conditions=initial_conditions, 
+                output_file=output_file,
+            )
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         oppo_init_conditions = self.task.get_opponent_initial_conditions()
         if self.opponent_sim:
             self.opponent_sim.reinitialise(oppo_init_conditions)
         else:
+            # use opponent_flightgear.xml to change the port
             self.opponent_sim = self._init_new_sim(
-                self.JSBSIM_DT_HZ, self.opponent_aircraft, oppo_init_conditions
+                dt=self.JSBSIM_DT_HZ,
+                aircraft=self.opponent_aircraft, 
+                initial_conditions=oppo_init_conditions,
+                output_file="opponent_flightgear.xml"
             )
         super(JsbSimEnv,self).reset(seed=seed)
         init_conditions = self.task.get_initial_conditions()
@@ -323,8 +339,15 @@ class DoubleJsbSimEnv(JsbSimEnv):
 
         state = self.task.observe_first_state(self.sim, self.opponent_sim)
 
+
+        if self.render_mode == "flightgear":
+            if not self.flightgear_visualiser:
+                self.flightgear_visualiser = MultiplayerFlightGearVisualiser(
+                    self.sim, self.task.get_props_to_output(), block_until_loaded=True,
+                )
         if self.flightgear_visualiser:
             self.flightgear_visualiser.configure_simulation_output(self.sim)
+            self.flightgear_visualiser.configure_simulation_output(self.opponent_sim)
         observation = np.array(state)
         info = {}
         if self.render_mode == "human":
@@ -386,6 +409,28 @@ class DoubleJsbSimEnv(JsbSimEnv):
 
         return observation, reward, terminated, False, info
 
+    def render(self, flightgear_blocking=True):
+        if self.render_mode is None:
+            assert self.spec is not None
+            gym.logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization, "
+                f'e.g. gym.make("{self.spec.id}", render_mode="human")'
+            )
+            return
+
+        if self.render_mode == "human":
+            if not self.figure_visualiser:
+                self.figure_visualiser = FigureVisualiser(
+                    self.sim, self.task.get_props_to_output()
+                )
+            self.figure_visualiser.plot(self.sim)
+        elif self.render_mode == "flightgear":
+            if not self.flightgear_visualiser:
+                self.flightgear_visualiser = MultiplayerFlightGearVisualiser(
+                    self.sim, self.task.get_props_to_output(), block_until_loaded=flightgear_blocking,
+                )
+
     def close(self):
         if self.opponent_sim:
             self.opponent_sim.close()
@@ -423,12 +468,13 @@ class NoFGDoubleJsbSimEnv(DoubleJsbSimEnv):
         "render_modes": ["human", "graph"],
         "render_fps": 60,
     }
-    def _init_new_sim(self, dt: float, aircraft: Aircraft, initial_conditions: Dict):
+    def _init_new_sim(self, dt: float, aircraft: Aircraft, initial_conditions: Dict, output_file: str=None):
         return Simulation(
             sim_frequency_hz=dt,
             aircraft=aircraft,
             init_conditions=initial_conditions,
             allow_flightgear_output=False,
+            output_file=output_file if output_file else None
         )
     def render(self, flightgear_blocking=True):
         if (

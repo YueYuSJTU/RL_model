@@ -24,6 +24,7 @@ class Simulation(object):
         aircraft: Aircraft = c172,
         init_conditions: Dict[prp.Property, float] = None,
         allow_flightgear_output: bool = True,
+        output_file: str = "flightgear.xml",
     ):
         r"""
         Constructor. Creates an instance of JSBSim and sets initial conditions.
@@ -39,10 +40,7 @@ class Simulation(object):
         self.jsbsim = jsbsim.FGFDMExec(root_dir=self.ROOT_DIR)
         self.jsbsim.set_debug_level(0)
         if allow_flightgear_output:
-            flightgear_output_config = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), self.OUTPUT_FILE
-            )
-            self.jsbsim.set_output_directive(flightgear_output_config)
+            self.__set_output_file(output_file)
         self.sim_dt = 1.0 / sim_frequency_hz
         self.aircraft = aircraft
         self.initialise(self.sim_dt, self.aircraft.jsbsim_id, init_conditions)
@@ -51,6 +49,19 @@ class Simulation(object):
 
         # for prop in self.jsbsim.get_property_catalog():
         #     print((prop))
+
+    def __set_output_file(self, output_file: str) -> None:
+        """
+        Sets the output file for JSBSim to write to.
+
+        :param output_file: string, the name of the output file
+        """
+        if not output_file.endswith(".xml"):
+            raise ValueError("Output file must be an XML file.")
+        flightgear_output_config = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), output_file
+        )
+        self.jsbsim.set_output_directive(flightgear_output_config)
 
     def __getitem__(self, prop: Union[prp.BoundedProperty, prp.Property]) -> float:
         """

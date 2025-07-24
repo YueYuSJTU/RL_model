@@ -402,7 +402,7 @@ class FlightGearVisualiser(object):
     TYPE = "socket"
     DIRECTION = "in"
     RATE = 60
-    SERVER = ""
+    SERVER = "127.0.0.1"
     PORT = 5550
     PROTOCOL = "udp"
     LOADED_MESSAGE = "loading cities done"
@@ -492,3 +492,121 @@ class FlightGearVisualiser(object):
     def close(self):
         if self.flightgear_process:
             self.flightgear_process.kill()
+
+
+class MultiplayerFlightGearVisualiser(FlightGearVisualiser):
+    def __init__(
+        self,
+        sim: Simulation,
+        print_props: Tuple[prp.Property],
+        multiplayer_ports: List[int] = [5552],  # 默认添加5552端口实例
+        block_until_loaded=True,
+    ):
+        self.multiplayer_ports = [5550] + multiplayer_ports  # 主端口5550 + 附加端口
+        self.flightgear_processes = []  # 存储多个进程
+        
+        # 手动执行父类初始化中的关键步骤
+        self.configure_simulation_output(sim)
+        self.print_props = print_props
+        self.figure = FigureVisualiser(sim, print_props)
+        
+        # 启动所有FlightGear实例
+        self._launch_all_instances(sim.get_aircraft())
+        
+        if block_until_loaded:
+            self._block_until_all_loaded()
+
+    def _launch_all_instances(self, aircraft: Aircraft):
+        """启动所有FlightGear实例"""
+        for port in self.multiplayer_ports:
+            cmd = self._create_cmd_line_args(
+                aircraft.flightgear_id, 
+                port,
+                is_main=(port == 5550)  # 标记主实例
+            )
+            gym.logger.info(f'Launching FG on port {port}: {" ".join(cmd)}')
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+            self.flightgear_processes.append(process)
+        
+        gym.logger.info(f"Started {len(self.flightgear_processes)} FlightGear instances")
+
+    @staticmethod
+    def _create_cmd_line_args(aircraft_id: str, port: int, is_main: bool):
+        """为指定端口生成命令行参数"""
+        base_args = list(FlightGearVisualiser._create_cmd_line_args(aircraft_id))
+        
+        # 修改主连接端口
+        base_args[2] = f"--native-fdm=socket,in,60,127.0.0.1,{port},udp"
+        
+        # 移除禁用AI的参数
+        if '--disable-ai-traffic' in base_args:
+            base_args.remove('--disable-ai-traffic')
+        
+        # 添加多人游戏支持
+        base_args.extend([
+            "--enable-ai-traffic",
+            "--allow-nasal-from-sockets",
+            "--enable-ai-models",
+            # f"--callsign=Player{port}"
+        ])
+        
+        # 配置多人游戏端口
+        if is_main:
+            base_args.extend([
+                "--multiplay=out,10,127.0.0.1,5000",
+                "--multiplay=in,10,127.0.0.1,5001"
+            ])
+        else:
+            # 其他实例连接到主实例的5000端口
+            base_args.extend([
+                "--multiplay=out,10,127.0.0.1,5001",  # 添加这行输出配置
+                "--multiplay=in,10,127.0.0.1,5000"
+            ])
+        base_args.append(f"--callsign=Player{port}")
+
+        return tuple(base_args)
+
+    def _block_until_all_loaded(self):
+        """等待所有实例加载完成"""
+        print("Waiting for FlightGear instances to load...")
+        loaded = [False] * len(self.flightgear_processes)
+        
+        while not all(loaded):
+            for i, process in enumerate(self.flightgear_processes):
+                if loaded[i]:
+                    continue
+                    
+                # 非阻塞读取输出
+                line = process.stdout.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+                
+                # 检查加载完成标志
+                if (self.LOADED_MESSAGE in line or 
+                    self.LOADED_MESSAGE1 in line or 
+                    self.LOADED_MESSAGE2 in line):
+                    loaded[i] = True
+                    print(f"Instance on port {self.multiplayer_ports[i]} loaded")
+            
+            time.sleep(0.1)
+        
+        print("All FlightGear instances ready")
+        time.sleep(5)  # 额外缓冲时间
+
+    def close(self):
+        """关闭所有FlightGear实例"""
+        for process in self.flightgear_processes:
+            if process:
+                process.terminate()
+                try:
+                    process.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+        print("All FlightGear instances closed")
