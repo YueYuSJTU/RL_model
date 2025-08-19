@@ -4,6 +4,7 @@ from jsbgym_m.tasks import Shaping, HeadingControlTask
 from jsbgym_m.task_tracking import TrackingTask
 from jsbgym_m.simulation import Simulation
 from jsbgym_m.visualiser import FigureVisualiser, FlightGearVisualiser, GraphVisualiser, MultiplayerFlightGearVisualiser
+from jsbgym_m.enhanced_visualiser import Enhanced3DVisualiser, AnimatedEnhancedVisualiser
 from jsbgym_m.aircraft import Aircraft, c172, f16
 from typing import Optional, Type, Tuple, Dict
 import warnings
@@ -381,31 +382,31 @@ class DoubleJsbSimEnv(JsbSimEnv):
         )
         observation = np.array(state)
 
-        # save reward components from info
-        if self.render_mode == "human":
-            if hasattr(self.task, "opponent"):
-                x, y, z, oppoX, oppoY, oppoZ = self.task.get_position(self.sim)
-                self.figure_visualiser.save_target(oppoX, oppoY, oppoZ)
-            else:
-                x, y, z = self.task.get_position(self.sim)
-            self.figure_visualiser.save_position(x, y, z)
-            self.figure_visualiser.save_reward_components(info["reward"])
+        # # save reward components from info
+        # if self.render_mode == "human":
+        #     if hasattr(self.task, "opponent"):
+        #         x, y, z, oppoX, oppoY, oppoZ = self.task.get_position(self.sim)
+        #         self.figure_visualiser.save_target(oppoX, oppoY, oppoZ)
+        #     else:
+        #         x, y, z = self.task.get_position(self.sim)
+        #     self.figure_visualiser.save_position(x, y, z)
+        #     self.figure_visualiser.save_reward_components(info["reward"])
 
-        # plot trajectory
-        if self.render_mode == "human" and terminated:
-            self.render()
-            if hasattr(self.task, "target_Xposition"):
-                target = [self.task._get_target_position("x"), 
-                          self.task._get_target_position("y"),
-                          self.task._get_target_position("z")]
-                self.figure_visualiser.plot_position(target)
-                self.figure_visualiser.plot_reward_components()
-            elif hasattr(self.task, "opponent"):
-                self.figure_visualiser.plot_position("tracking")
-                self.figure_visualiser.plot_reward_components()
-            else:
-                self.figure_visualiser.plot_position()
-                self.figure_visualiser.plot_reward_components()
+        # # plot trajectory
+        # if self.render_mode == "human" and terminated:
+        #     self.render()
+        #     if hasattr(self.task, "target_Xposition"):
+        #         target = [self.task._get_target_position("x"), 
+        #                   self.task._get_target_position("y"),
+        #                   self.task._get_target_position("z")]
+        #         self.figure_visualiser.plot_position(target)
+        #         self.figure_visualiser.plot_reward_components()
+        #     elif hasattr(self.task, "opponent"):
+        #         self.figure_visualiser.plot_position("tracking")
+        #         self.figure_visualiser.plot_reward_components()
+        #     else:
+        #         self.figure_visualiser.plot_position()
+        #         self.figure_visualiser.plot_reward_components()
 
         return observation, reward, terminated, False, info
 
@@ -421,7 +422,10 @@ class DoubleJsbSimEnv(JsbSimEnv):
 
         if self.render_mode == "human":
             if not self.figure_visualiser:
-                self.figure_visualiser = FigureVisualiser(
+                # self.figure_visualiser = FigureVisualiser(
+                #     self.sim, self.task.get_props_to_output()
+                # )
+                self.figure_visualiser = Enhanced3DVisualiser(
                     self.sim, self.task.get_props_to_output()
                 )
             self.figure_visualiser.plot(self.sim)
