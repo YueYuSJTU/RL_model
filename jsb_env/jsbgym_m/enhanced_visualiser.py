@@ -10,6 +10,10 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Line3D, Poly3DCollection
 from typing import NamedTuple, Tuple, List, Dict, Optional
 import os
+from scipy import ndimage
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from matplotlib.image import BboxImage
+from matplotlib.transforms import Bbox, TransformedBbox
 
 import jsbgym_m.properties as prp
 from jsbgym_m.aircraft import Aircraft
@@ -42,7 +46,7 @@ class Enhanced3DVisualiser(object):
     TEXT_Y_INCREMENT = -0.08
     
     # 飞机模型缩放和显示参数
-    AIRCRAFT_SCALE = 100.0  # 飞机模型大小
+    AIRCRAFT_SCALE = 100.0  # 调整飞机图片大小
     TRAIL_LENGTH = 100      # 轨迹长度
     VIEW_SIZE = 5000        # 视图大小（英尺）
     
@@ -60,18 +64,49 @@ class Enhanced3DVisualiser(object):
         self.grid_lines = []  # 存储地面网格线引用
         self.last_grid_center = None  # 记录上次网格中心位置
 
-        
-        # 存储轨迹数据
+        # 存储轨迹数据 - 主机
         self.positions: List[Tuple[float, float, float]] = []
         self.attitudes: List[Tuple[float, float, float]] = []  # roll, pitch, yaw
         
-        # 创建简化的飞机模型点
-        self._create_aircraft_model()
+        # 存储敌机轨迹数据
+        self.opponent_positions: List[Tuple[float, float, float]] = []
+        self.opponent_attitudes: List[Tuple[float, float, float]] = []  # roll, pitch, yaw
         
-    def _create_aircraft_model(self):
-        """创建简化的飞机模型几何体"""
+        # 存储飞机图片对象
+        self.aircraft_images = []  # 存储飞机图片对象
+        self.opponent_images = []  # 存储敌机图片对象
+        
+        # 加载飞机图片
+        self._load_aircraft_image()
+        
+    def _load_aircraft_image(self):
+        """加载飞机图片"""
+        try:
+            # 尝试多个可能的路径
+            possible_paths = [
+                '/home/ubuntu/Workfile/RL/RL_model/src/multiAgent/aerobench/visualize/airplane.png',
+                os.path.join(os.path.dirname(__file__), '../../src/multiAgent/aerobench/visualize/airplane.png'),
+                os.path.join(os.path.dirname(__file__), 'airplane.png'),
+                'airplane.png'
+            ]
+            
+            self.airplane_img = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    self.airplane_img = plt.imread(path)
+                    print(f"Loaded airplane image from: {path}")
+                    break
+            
+            if self.airplane_img is None:
+                print("Warning: airplane.png not found, falling back to simple model")
+                self._create_simple_aircraft_model()
+        except Exception as e:
+            print(f"Error loading airplane image: {e}")
+            self._create_simple_aircraft_model()
+        
+    def _create_simple_aircraft_model(self):
+        """创建简化的飞机模型几何体（备用方案）"""
         # 简化的飞机模型 - 用线段表示
-        # 机身
         self.aircraft_lines = {
             'fuselage': np.array([[-1, 0, 0], [1, 0, 0]]),  # 机身主轴
             'wing': np.array([[-0.2, -0.8, 0], [-0.2, 0.8, 0]]),  # 主翼
@@ -79,36 +114,53 @@ class Enhanced3DVisualiser(object):
             'tail_v': np.array([[0.8, 0, -0.3], [0.8, 0, 0.3]]),  # 垂直尾翼
         }
         
-    def plot(self, sim: Simulation) -> None:
+    def plot(self, sim: Simulation, opponent_sim: Simulation = None) -> None:
         """
         创建或更新飞机状态的3D可视化
         
-        :param sim: 要可视化的模拟对象
+        :param sim: 主机的模拟对象
+        :param opponent_sim: 敌机的模拟对象（可选）
         """
         mpt.use("TkAgg")
         if not self.figure:
             self.figure, self.axes = self._plot_configure()
             
-        # 获取当前飞机状态
+        # 获取当前主机状态
         current_pos = self._get_aircraft_position(sim)
         current_att = self._get_aircraft_attitude(sim)
         
-        # 存储轨迹数据
+        # 存储主机轨迹数据
         self.positions.append(current_pos)
         self.attitudes.append(current_att)
         
-        # 限制轨迹长度
+        # 限制主机轨迹长度
         if len(self.positions) > self.TRAIL_LENGTH:
             self.positions.pop(0)
             self.attitudes.pop(0)
             
-        # 更新3D显示
-        self._update_3d_display(current_pos, current_att)
+        # 处理敌机数据（如果提供）
+        opponent_pos = None
+        opponent_att = None
+        if opponent_sim is not None:
+            opponent_pos = self._get_aircraft_position(opponent_sim)
+            opponent_att = self._get_aircraft_attitude(opponent_sim)
+            
+            # 存储敌机轨迹数据
+            self.opponent_positions.append(opponent_pos)
+            self.opponent_attitudes.append(opponent_att)
+            
+            # 限制敌机轨迹长度
+            if len(self.opponent_positions) > self.TRAIL_LENGTH:
+                self.opponent_positions.pop(0)
+                self.opponent_attitudes.pop(0)
+            
+        # 更新3D显示（包含主机和敌机）
+        self._update_3d_display(current_pos, current_att, opponent_pos, opponent_att)
         
-        # 更新状态文本
+        # 更新状态文本（仅主机）
         self._print_state(sim)
         
-        # 更新控制量显示
+        # 更新控制量显示（仅主机）
         self._plot_control_states(sim, self.axes)
         self._plot_control_commands(sim, self.axes)
         
@@ -135,27 +187,49 @@ class Enhanced3DVisualiser(object):
         return (roll, pitch, yaw)
         
     def _update_3d_display(self, position: Tuple[float, float, float], 
-                        attitude: Tuple[float, float, float]):
-        """更新3D显示"""
+                        attitude: Tuple[float, float, float],
+                        opponent_position: Tuple[float, float, float] = None,
+                        opponent_attitude: Tuple[float, float, float] = None):
+        """更新3D显示，包含主机和敌机"""
         ax = self.axes.axes_3d
         
         # 清除之前的飞机模型和轨迹
         for artist in ax.collections[:]:
             artist.remove()
         for line in ax.lines[:]:
-            if hasattr(line, '_aircraft_model') or hasattr(line, '_trail'):
+            if (hasattr(line, '_aircraft_model') or hasattr(line, '_trail') or 
+                hasattr(line, '_opponent_model') or hasattr(line, '_opponent_trail')):
                 line.remove()
+        
+        # 清除之前的图片对象
+        for img_obj in self.aircraft_images + self.opponent_images:
+            try:
+                img_obj.remove()
+            except:
+                pass
+        self.aircraft_images.clear()
+        self.opponent_images.clear()
                 
-        # 绘制轨迹（只绘制最近的TRAIL_LENGTH个点）
+        # 绘制主机轨迹
         if len(self.positions) > 1:
             trail_x, trail_y, trail_z = zip(*self.positions[-self.TRAIL_LENGTH:])
-            trail_line = ax.plot(trail_x, trail_y, trail_z, 'b-', alpha=0.7, linewidth=2, label='Flight Path')[0]
-            trail_line._trail = True  # 标记为轨迹线
+            trail_line = ax.plot(trail_x, trail_y, trail_z, 'b-', alpha=0.7, linewidth=2, label='Own Aircraft Path')[0]
+            trail_line._trail = True
             
-        # 绘制当前飞机模型
-        self._draw_aircraft_model(ax, position, attitude)
+        # 绘制敌机轨迹（如果存在）
+        if opponent_position is not None and len(self.opponent_positions) > 1:
+            opp_trail_x, opp_trail_y, opp_trail_z = zip(*self.opponent_positions[-self.TRAIL_LENGTH:])
+            opp_trail_line = ax.plot(opp_trail_x, opp_trail_y, opp_trail_z, 'r--', alpha=0.7, linewidth=2, label='Opponent Aircraft Path')[0]
+            opp_trail_line._opponent_trail = True
+            
+        # 绘制当前主机模型
+        self._draw_aircraft_model(ax, position, attitude, is_opponent=False)
         
-        # 设置视图范围
+        # 绘制当前敌机模型（如果存在）
+        if opponent_position is not None and opponent_attitude is not None:
+            self._draw_aircraft_model(ax, opponent_position, opponent_attitude, is_opponent=True)
+        
+        # 设置视图范围（以主机为中心）
         x, y, z = position
         size = self.VIEW_SIZE * 0.3048  # 转换为米
         ax.set_xlim([x - size, x + size])
@@ -166,17 +240,148 @@ class Enhanced3DVisualiser(object):
         self._draw_ground_grid(ax, x, y, size)
 
     def _draw_aircraft_model(self, ax: plt.Axes, position: Tuple[float, float, float],
-                           attitude: Tuple[float, float, float]):
-        """绘制飞机模型"""
+                           attitude: Tuple[float, float, float], is_opponent: bool = False):
+        """绘制飞机模型 - 使用图片或线条"""
         x, y, z = position
         roll, pitch, yaw = attitude
+        
+        print(f"Drawing aircraft model at: ({x:.1f}, {y:.1f}, {z:.1f}), is_opponent: {is_opponent}")
+        
+        # 优先使用图片方法
+        if hasattr(self, 'airplane_img') and self.airplane_img is not None:
+            try:
+                self._draw_aircraft_image_3d(ax, position, attitude, is_opponent)
+                print("Successfully drew aircraft image in 3D")
+                return
+            except Exception as e:
+                print(f"Failed to draw 3D aircraft image: {e}")
+        
+        # 如果图片方法失败，使用线条模型
+        try:
+            self._draw_aircraft_lines(ax, position, attitude, is_opponent)
+            print("Successfully drew aircraft lines")
+        except Exception as e2:
+            print(f"Failed to draw aircraft lines: {e2}")
+            # 最后的备用方案：简单点标记
+            color = 'red' if is_opponent else 'blue'
+            marker = 'x' if is_opponent else 'o'
+            scatter = ax.scatter([x], [y], [z], c=color, s=500, marker=marker, 
+                               edgecolors='black', linewidth=3, alpha=1.0)
+            scatter._aircraft_model = True if not is_opponent else None
+            scatter._opponent_model = True if is_opponent else None
+            print("Drew fallback scatter point")
+
+    def _draw_aircraft_image_3d(self, ax: plt.Axes, position: Tuple[float, float, float],
+                              attitude: Tuple[float, float, float], is_opponent: bool = False):
+        """在3D环境中绘制飞机图片 - 参考 aerobench 方法"""
+        x, y, z = position
+        roll, pitch, yaw = attitude
+        
+        # 计算飞机在xy平面的投影位置（类似anim.py的方法）
+        # 获取当前坐标轴的范围来计算图片大小
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        
+        # 计算合适的飞机图片大小（参考anim.py中的plane_size_factor）
+        axis_range = max(xlim[1] - xlim[0], ylim[1] - ylim[0])
+        plane_size_factor = 0.02  # 调整这个值来控制飞机大小
+        size = axis_range * plane_size_factor
+        
+        # 计算飞机朝向角度（参考anim.py的角度计算）
+        theta_deg = -yaw * 180 / math.pi
+        
+        # 旋转图片（参考anim.py的图片旋转）
+        img_rotated = ndimage.rotate(self.airplane_img, theta_deg, order=1, reshape=True)
+        
+        # 根据是否为敌机调整图片颜色
+        if is_opponent:
+            # 将敌机图片调整为红色调
+            img_colored = img_rotated.copy()
+            if len(img_colored.shape) == 3 and img_colored.shape[2] >= 3:  # RGB图片
+                # 增强红色通道，减少其他通道
+                img_colored[:, :, 0] = np.minimum(img_colored[:, :, 0] * 1.5, 1.0)
+                img_colored[:, :, 1] = img_colored[:, :, 1] * 0.3
+                img_colored[:, :, 2] = img_colored[:, :, 2] * 0.3
+        else:
+            img_colored = img_rotated
+        
+        # 计算旋转后图片的尺寸比例（参考anim.py的ratios计算）
+        original_size = list(self.airplane_img.shape)
+        rotated_size = list(img_rotated.shape)
+        ratios = [r / o for r, o in zip(rotated_size, original_size)]
+        
+        # 计算最终图片的宽度和高度
+        width = size * ratios[1] if len(ratios) > 1 else size
+        height = size * ratios[0] if len(ratios) > 0 else size
+        
+        # 创建BboxImage对象（参考anim.py的方法）
+        box = Bbox.from_bounds(x - width/2, y - height/2, width, height)
+        tbox = TransformedBbox(box, ax.transData)
+        box_image = BboxImage(tbox, zorder=10, alpha=0.8)
+        box_image.set_data(img_colored)
+        
+        # 将图片添加到坐标轴
+        ax.add_artist(box_image)
+        
+        # 保存图片对象引用以便后续清理
+        if is_opponent:
+            self.opponent_images.append(box_image)
+        else:
+            self.aircraft_images.append(box_image)
+        
+        # 添加高度指示线（从地面到飞机位置）
+        height_line = ax.plot([x, x], [y, y], [0, z], 
+                            'r:' if is_opponent else 'b:', 
+                            alpha=0.6, linewidth=2)[0]
+        height_line._aircraft_model = True if not is_opponent else None
+        height_line._opponent_model = True if is_opponent else None
+        
+        # 添加飞机标签（在3D空间中显示）
+        label = "Enemy" if is_opponent else "Own"
+        color = 'red' if is_opponent else 'blue'
+        text = ax.text(x, y, z + 100, label, fontsize=12, color=color, 
+                      ha='center', va='bottom', weight='bold')
+        if is_opponent:
+            self.opponent_images.append(text)
+        else:
+            self.aircraft_images.append(text)
+        
+    def _draw_aircraft_lines(self, ax: plt.Axes, position: Tuple[float, float, float],
+                           attitude: Tuple[float, float, float], is_opponent: bool = False):
+        """使用线条绘制飞机模型（备用方案） - 添加调试信息"""
+        x, y, z = position
+        roll, pitch, yaw = attitude
+        
+        print(f"Drawing aircraft lines at position: ({x:.1f}, {y:.1f}, {z:.1f})")
+        
+        # 检查是否有线条模型数据
+        if not hasattr(self, 'aircraft_lines') or not self.aircraft_lines:
+            print("Warning: No aircraft_lines data available")
+            # 创建基本的标记点
+            color = 'red' if is_opponent else 'blue'
+            marker = '^' if not is_opponent else 'v'
+            scatter = ax.scatter([x], [y], [z], c=color, s=300, marker=marker, 
+                               edgecolors='black', linewidth=3, alpha=0.9)
+            scatter._aircraft_model = True if not is_opponent else None
+            scatter._opponent_model = True if is_opponent else None
+            return
         
         # 创建旋转矩阵
         rotation_matrix = self._create_rotation_matrix(roll, pitch, yaw)
         
-        # 绘制飞机各部分
-        colors = {'fuselage': 'red', 'wing': 'blue', 'tail_h': 'green', 'tail_v': 'orange'}
+        # 根据是否为敌机选择不同的颜色方案
+        if is_opponent:
+            colors = {'fuselage': 'darkred', 'wing': 'darkblue', 'tail_h': 'darkgreen', 'tail_v': 'darkorange'}
+            line_style = '--'
+            linewidth = 3
+            marker_attr = '_opponent_model'
+        else:
+            colors = {'fuselage': 'red', 'wing': 'blue', 'tail_h': 'green', 'tail_v': 'orange'}
+            line_style = '-'
+            linewidth = 4
+            marker_attr = '_aircraft_model'
         
+        # 绘制飞机各部分
         for part_name, line_points in self.aircraft_lines.items():
             # 缩放和旋转
             scaled_points = line_points * self.AIRCRAFT_SCALE
@@ -185,11 +390,13 @@ class Enhanced3DVisualiser(object):
             # 平移到飞机位置
             world_points = rotated_points + np.array([x, y, z])
             
+            print(f"Drawing {part_name}: {world_points}")
+            
             # 绘制线段
             line = ax.plot3D(world_points[:, 0], world_points[:, 1], world_points[:, 2],
-                           color=colors[part_name], linewidth=3, label=part_name)[0]
-            line._aircraft_model = True  # 标记为飞机模型
-            
+                           color=colors[part_name], linewidth=linewidth, linestyle=line_style)[0]
+            setattr(line, marker_attr, True)  # 动态设置标记属性
+
     def _create_rotation_matrix(self, roll: float, pitch: float, yaw: float) -> np.ndarray:
         """创建欧拉角旋转矩阵（ZYX顺序）"""
         cr, sr = math.cos(roll), math.sin(roll)
@@ -445,10 +652,12 @@ class Enhanced3DVisualiser(object):
         """重置轨迹数据"""
         self.positions = []
         self.attitudes = []
+        self.opponent_positions = []
+        self.opponent_attitudes = []
         if self.axes and self.axes.axes_3d:
             # 清除3D显示中的轨迹
             for line in self.axes.axes_3d.lines[:]:
-                if not hasattr(line, '_aircraft_model'):
+                if not (hasattr(line, '_aircraft_model') or hasattr(line, '_opponent_model')):
                     line.remove()
 
 
@@ -469,8 +678,8 @@ class AnimatedEnhancedVisualiser(Enhanced3DVisualiser):
         """停止记录动画数据"""
         self.is_recording = False
         
-    def plot(self, sim: Simulation) -> None:
-        """重写plot方法以支持动画记录"""
+    def plot(self, sim: Simulation, opponent_sim: Simulation = None) -> None:
+        """重写plot方法以支持动画记录和双机显示"""
         if self.is_recording:
             # 记录当前帧数据
             frame_data = {
@@ -479,10 +688,19 @@ class AnimatedEnhancedVisualiser(Enhanced3DVisualiser):
                 'controls': self._get_control_states(sim),
                 'state_data': {prop: sim[prop] for prop in self.print_props}
             }
+            
+            # 记录敌机数据（如果存在）
+            if opponent_sim is not None:
+                frame_data['opponent_position'] = self._get_aircraft_position(opponent_sim)
+                frame_data['opponent_attitude'] = self._get_aircraft_attitude(opponent_sim)
+            else:
+                frame_data['opponent_position'] = None
+                frame_data['opponent_attitude'] = None
+                
             self.animation_data.append(frame_data)
             
         # 调用父类的plot方法
-        super().plot(sim)
+        super().plot(sim, opponent_sim)
         
     def _get_control_states(self, sim: Simulation) -> Dict:
         """获取控制状态数据"""
@@ -515,7 +733,8 @@ class AnimatedEnhancedVisualiser(Enhanced3DVisualiser):
             frame_data = self.animation_data[frame_idx]
             
             # 更新3D显示
-            self._update_3d_display(frame_data['position'], frame_data['attitude'])
+            self._update_3d_display(frame_data['position'], frame_data['attitude'],
+                                    frame_data['opponent_position'], frame_data['opponent_attitude'])
             
             # 更新状态文本
             for prop, text in zip(self.print_props, self.value_texts):

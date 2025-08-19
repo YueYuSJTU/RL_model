@@ -428,7 +428,7 @@ class DoubleJsbSimEnv(JsbSimEnv):
                 self.figure_visualiser = Enhanced3DVisualiser(
                     self.sim, self.task.get_props_to_output()
                 )
-            self.figure_visualiser.plot(self.sim)
+            self.figure_visualiser.plot(self.sim, self.opponent_sim)
         elif self.render_mode == "flightgear":
             if not self.flightgear_visualiser:
                 self.flightgear_visualiser = MultiplayerFlightGearVisualiser(
@@ -440,22 +440,6 @@ class DoubleJsbSimEnv(JsbSimEnv):
             self.opponent_sim.close()
         super().close()
 
-
-
-
-        # # 这部分之后要放到task里面
-        # # 先运行对手飞机的控制逻辑
-        # opponent_action = self._get_opponent_action()
-        # self._apply_opponent_action(opponent_action)
-        
-        # # 再运行agent的动作
-        # for prop, cmd in zip(self.task.action_variables, action):
-        #     self.agent_sim[prop] = cmd
-            
-        # # 同步运行两个仿真
-        # for _ in range(sim_steps):
-        #     self.agent_sim.run()
-        #     self.opponent_sim.run()
 
 
 class NoFGDoubleJsbSimEnv(DoubleJsbSimEnv):
