@@ -43,7 +43,7 @@ class Enhanced3DVisualiser(object):
     
     # 飞机模型缩放和显示参数
     AIRCRAFT_SCALE = 100.0  # 飞机模型大小
-    TRAIL_LENGTH = 10      # 轨迹长度
+    TRAIL_LENGTH = 100      # 轨迹长度
     VIEW_SIZE = 5000        # 视图大小（英尺）
     
     def __init__(self, _: Simulation, print_props: Tuple[prp.Property]):
@@ -57,6 +57,9 @@ class Enhanced3DVisualiser(object):
         self.figure: plt.Figure = None
         self.axes: EnhancedAxesTuple = None
         self.value_texts: Tuple[plt.Text] = None
+        self.grid_lines = []  # 存储地面网格线引用
+        self.last_grid_center = None  # 记录上次网格中心位置
+
         
         # 存储轨迹数据
         self.positions: List[Tuple[float, float, float]] = []
@@ -132,21 +135,22 @@ class Enhanced3DVisualiser(object):
         return (roll, pitch, yaw)
         
     def _update_3d_display(self, position: Tuple[float, float, float], 
-                          attitude: Tuple[float, float, float]):
+                        attitude: Tuple[float, float, float]):
         """更新3D显示"""
         ax = self.axes.axes_3d
         
-        # 清除之前的飞机模型
+        # 清除之前的飞机模型和轨迹
         for artist in ax.collections[:]:
             artist.remove()
         for line in ax.lines[:]:
-            if hasattr(line, '_aircraft_model'):
+            if hasattr(line, '_aircraft_model') or hasattr(line, '_trail'):
                 line.remove()
                 
-        # 绘制轨迹
+        # 绘制轨迹（只绘制最近的TRAIL_LENGTH个点）
         if len(self.positions) > 1:
-            trail_x, trail_y, trail_z = zip(*self.positions)
-            ax.plot(trail_x, trail_y, trail_z, 'b-', alpha=0.7, linewidth=2, label='Flight Path')
+            trail_x, trail_y, trail_z = zip(*self.positions[-self.TRAIL_LENGTH:])
+            trail_line = ax.plot(trail_x, trail_y, trail_z, 'b-', alpha=0.7, linewidth=2, label='Flight Path')[0]
+            trail_line._trail = True  # 标记为轨迹线
             
         # 绘制当前飞机模型
         self._draw_aircraft_model(ax, position, attitude)
@@ -160,7 +164,7 @@ class Enhanced3DVisualiser(object):
         
         # 绘制地面网格
         self._draw_ground_grid(ax, x, y, size)
-        
+
     def _draw_aircraft_model(self, ax: plt.Axes, position: Tuple[float, float, float],
                            attitude: Tuple[float, float, float]):
         """绘制飞机模型"""
@@ -201,44 +205,63 @@ class Enhanced3DVisualiser(object):
         return R
         
     def _draw_ground_grid(self, ax: plt.Axes, center_x: float, center_y: float, size: float):
-        """绘制地面网格"""
-        grid_size = size / 10
-        x_range = np.arange(center_x - size, center_x + size, grid_size)
-        y_range = np.arange(center_y - size, center_y + size, grid_size)
-        
-        # 绘制地面网格线
-        for x in x_range:
-            ax.plot3D([x, x], [center_y - size, center_y + size], [0, 0], 
-                     'k-', alpha=0.3, linewidth=0.5)
-        for y in y_range:
-            ax.plot3D([center_x - size, center_x + size], [y, y], [0, 0],
-                     'k-', alpha=0.3, linewidth=0.5)
+        """绘制地面网格（优化版）"""
+        # 只有当飞机移动较远时才重新绘制网格
+        if (self.last_grid_center is None or 
+            abs(center_x - self.last_grid_center[0]) > size/4 or 
+            abs(center_y - self.last_grid_center[1]) > size/4):
+            
+            # 清除旧的网格线
+            for line in self.grid_lines:
+                line.remove()
+            self.grid_lines.clear()
+            
+            # 绘制新的网格线
+            grid_size = size / 5  # 减少网格密度
+            x_range = np.arange(center_x - size, center_x + size, grid_size)
+            y_range = np.arange(center_y - size, center_y + size, grid_size)
+            
+            for x in x_range:
+                line = ax.plot3D([x, x], [center_y - size, center_y + size], [0, 0], 
+                            'k-', alpha=0.3, linewidth=0.5)[0]
+                self.grid_lines.append(line)
+                
+            for y in y_range:
+                line = ax.plot3D([center_x - size, center_x + size], [y, y], [0, 0],
+                            'k-', alpha=0.3, linewidth=0.5)[0]
+                self.grid_lines.append(line)
+                
+            self.last_grid_center = (center_x, center_y)
                      
     def _plot_configure(self):
         """配置图形布局"""
         plt.ion()
-        figure = plt.figure(figsize=(16, 10))
+        figure = plt.figure(figsize=(18, 10))  # 稍微减小宽度，增加高度比例
         
-        # 创建网格布局
-        gs = plt.GridSpec(2, 4, width_ratios=[3, 1, 1, 1], height_ratios=[3, 1], 
-                         hspace=0.3, wspace=0.3)
+        # 创建更复杂的网格布局 - 减少左侧留白
+        gs = plt.GridSpec(3, 5, width_ratios=[5, 1.2, 1.2, 1, 1], height_ratios=[2, 1, 0.5], 
+                         hspace=0.3, wspace=0.4, left=0.05, right=0.98, top=0.95, bottom=0.08)
         
-        # 3D主显示区域
-        axes_3d = figure.add_subplot(gs[0, :3], projection='3d')
-        axes_3d.set_xlabel('East [m]', fontsize=12)
-        axes_3d.set_ylabel('North [m]', fontsize=12) 
-        axes_3d.set_zlabel('Altitude [m]', fontsize=12)
-        axes_3d.set_title('Aircraft 3D Position and Attitude', fontsize=14)
+        # 3D主显示区域 - 占据左侧大部分空间
+        axes_3d = figure.add_subplot(gs[:, :1], projection='3d')  # 占据所有行，第一列
+        axes_3d.set_xlabel('East [m]', fontsize=14)
+        axes_3d.set_ylabel('North [m]', fontsize=14) 
+        axes_3d.set_zlabel('Altitude [m]', fontsize=14)
+        axes_3d.set_title('Aircraft 3D Position and Attitude', fontsize=16, pad=20)
         
-        # 状态信息显示区域
-        axes_state = figure.add_subplot(gs[0, 3])
+        # 副翼+升降舵复合图 - 增大尺寸，确保正方形
+        axes_stick = figure.add_subplot(gs[0:2, 1:3])  # 占据前两行，第2,3列
+        
+        # 油门图 - 右侧
+        axes_throttle = figure.add_subplot(gs[0:2, 3])  # 占据前两行，第4列
+        
+        # 方向舵图 - 下方，增大尺寸
+        axes_rudder = figure.add_subplot(gs[2, 1:4])  # 第三行，第二、三列
+        
+        # 状态信息显示区域 - 右侧
+        axes_state = figure.add_subplot(gs[:, 4])  # 所有行，第5列
         axes_state.axis('off')
         self._prepare_state_printing(axes_state)
-        
-        # 控制量显示区域（底部）
-        axes_stick = figure.add_subplot(gs[1, 0])
-        axes_throttle = figure.add_subplot(gs[1, 1]) 
-        axes_rudder = figure.add_subplot(gs[1, 2])
         
         # 配置控制量显示
         self._configure_control_axes(axes_stick, axes_throttle, axes_rudder)
@@ -267,38 +290,45 @@ class Enhanced3DVisualiser(object):
     def _configure_control_axes(self, axes_stick: plt.Axes, axes_throttle: plt.Axes, 
                                axes_rudder: plt.Axes):
         """配置控制量显示子图"""
-        # 操纵杆显示配置
-        axes_stick.set_xlabel('Ailerons [-]', fontsize=10)
-        axes_stick.set_ylabel('Elevator [-]', fontsize=10)
+        # 操纵杆显示配置 - 确保正方形比例
+        axes_stick.set_xlabel('Ailerons [-]', fontsize=12)
+        axes_stick.set_ylabel('Elevator [-]', fontsize=12)
+        axes_stick.set_title('Control Stick', fontsize=14, pad=15)
         axes_stick.set_xlim(left=-1, right=1)
         axes_stick.set_ylim(bottom=-1, top=1)
+        axes_stick.set_aspect('equal')  # 确保正方形显示
         axes_stick.spines['left'].set_position('zero')
         axes_stick.spines['bottom'].set_position('zero')
-        axes_stick.set_xticks([-1, 0, 1])
-        axes_stick.set_yticks([-1, 0, 1])
+        axes_stick.set_xticks([-1, -0.5, 0, 0.5, 1])
+        axes_stick.set_yticks([-1, -0.5, 0, 0.5, 1])
         axes_stick.spines['right'].set_visible(False)
         axes_stick.spines['top'].set_visible(False)
         axes_stick.grid(True, alpha=0.3)
+        axes_stick.tick_params(labelsize=10)
         
-        # 油门显示配置
-        axes_throttle.set_ylabel('Throttle [-]', fontsize=10)
-        axes_throttle.set_ylim(bottom=0, top=1)
-        axes_throttle.set_xlim(left=0, right=1)
-        axes_throttle.set_yticks([0, 0.5, 1])
-        axes_throttle.xaxis.set_visible(False)
+        # 油门显示配置 - 修正显示范围为0-1
+        axes_throttle.set_ylabel('Throttle [-]', fontsize=12)
+        axes_throttle.set_title('Throttle', fontsize=14, pad=15)
+        axes_throttle.set_ylim(bottom=0, top=2)
+        axes_throttle.set_xlim(left=-0.5, right=0.5)  # 调整x轴范围以更好显示条形图
+        axes_throttle.set_yticks([0, 0.25, 0.5, 0.75, 1])
+        axes_throttle.set_xticks([])  # 隐藏x轴刻度
         for spine in ['right', 'bottom', 'top']:
             axes_throttle.spines[spine].set_visible(False)
-        axes_throttle.grid(True, alpha=0.3)
+        axes_throttle.grid(True, alpha=0.3, axis='y')
+        axes_throttle.tick_params(labelsize=10)
         
-        # 方向舵显示配置
-        axes_rudder.set_xlabel('Rudder [-]', fontsize=10)
+        # 方向舵显示配置 - 增大显示区域
+        axes_rudder.set_xlabel('Rudder [-]', fontsize=12)
+        axes_rudder.set_title('Rudder', fontsize=14, pad=15)
         axes_rudder.set_xlim(left=-1, right=1)
-        axes_rudder.set_ylim(bottom=0, top=1)
-        axes_rudder.set_xticks([-1, 0, 1])
-        axes_rudder.yaxis.set_visible(False)
+        axes_rudder.set_ylim(bottom=-0.3, top=0.3)  # 调整y轴范围以更好显示条形图
+        axes_rudder.set_xticks([-1, -0.5, 0, 0.5, 1])
+        axes_rudder.set_yticks([])  # 隐藏y轴刻度
         for spine in ['left', 'right', 'top']:
             axes_rudder.spines[spine].set_visible(False)
-        axes_rudder.grid(True, alpha=0.3)
+        axes_rudder.grid(True, alpha=0.3, axis='x')
+        axes_rudder.tick_params(labelsize=10)
         
     def _prepare_state_printing(self, ax: plt.Axes):
         """准备状态信息显示"""
@@ -344,6 +374,9 @@ class Enhanced3DVisualiser(object):
                 for line in ax.lines[:]:
                     if hasattr(line, '_control_state'):
                         line.remove()
+                for patch in ax.patches[:]:
+                    if hasattr(patch, '_control_state'):
+                        patch.remove()
                         
             ail = sim[prp.aileron_left]
             ele = sim[prp.elevator] 
@@ -352,16 +385,18 @@ class Enhanced3DVisualiser(object):
             
             # 绘制当前控制面位置
             line1 = all_axes.axes_stick.plot([ail], [ele], 'r+', 
-                                           mfc='none', markersize=12, markeredgewidth=2)[0]
+                                           mfc='none', markersize=18, markeredgewidth=4)[0]
             line1._control_state = True
             
-            line2 = all_axes.axes_throttle.plot([0.5], [thr], 'r+',
-                                              mfc='none', markersize=12, markeredgewidth=2)[0] 
-            line2._control_state = True
+            # 油门用矩形条显示 - 调整宽度和位置
+            throttle_bar = all_axes.axes_throttle.bar([0], [thr], width=0.4, 
+                                                    bottom=[0], color='red', alpha=0.7)[0]
+            throttle_bar._control_state = True
             
-            line3 = all_axes.axes_rudder.plot([rud], [0.5], 'r+',
-                                            mfc='none', markersize=12, markeredgewidth=2)[0]
-            line3._control_state = True
+            # 方向舵用矩形条显示 - 调整高度和位置
+            rudder_bar = all_axes.axes_rudder.bar([rud], [0.2], width=0.08, 
+                                                bottom=[-0.1], color='red', alpha=0.7)[0]
+            rudder_bar._control_state = True
         except Exception as e:
             pass  # 忽略属性不存在的错误
             
@@ -373,6 +408,9 @@ class Enhanced3DVisualiser(object):
                 for line in ax.lines[:]:
                     if hasattr(line, '_control_cmd'):
                         line.remove()
+                for patch in ax.patches[:]:
+                    if hasattr(patch, '_control_cmd'):
+                        patch.remove()
                         
             ail_cmd = sim[prp.aileron_cmd]
             ele_cmd = sim[prp.elevator_cmd]
@@ -381,16 +419,18 @@ class Enhanced3DVisualiser(object):
             
             # 绘制控制指令
             line1 = all_axes.axes_stick.plot([ail_cmd], [ele_cmd], 'bo',
-                                           mfc='none', markersize=10, markeredgewidth=2)[0]
+                                           mfc='none', markersize=15, markeredgewidth=3)[0]
             line1._control_cmd = True
             
-            line2 = all_axes.axes_throttle.plot([0.5], [thr_cmd], 'bo',
-                                              mfc='none', markersize=10, markeredgewidth=2)[0]
-            line2._control_cmd = True
+            # 油门指令用条形图显示 - 调整样式
+            throttle_cmd_bar = all_axes.axes_throttle.bar([0], [thr_cmd], width=0.25, 
+                                                        bottom=[0], color='blue', alpha=0.5)[0]
+            throttle_cmd_bar._control_cmd = True
             
-            line3 = all_axes.axes_rudder.plot([rud_cmd], [0.5], 'bo', 
-                                            mfc='none', markersize=10, markeredgewidth=2)[0]
-            line3._control_cmd = True
+            # 方向舵指令用条形图显示 - 调整样式
+            rudder_cmd_bar = all_axes.axes_rudder.bar([rud_cmd], [0.15], width=0.06, 
+                                                    bottom=[-0.075], color='blue', alpha=0.5)[0]
+            rudder_cmd_bar._control_cmd = True
         except Exception as e:
             pass  # 忽略属性不存在的错误
             
