@@ -10,10 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Line3D, Poly3DCollection
 from typing import NamedTuple, Tuple, List, Dict, Optional
 import os
-from scipy import ndimage
-from matplotlib.offsetbox import AnnotationBbox, OffsetImage
-from matplotlib.image import BboxImage
-from matplotlib.transforms import Bbox, TransformedBbox
+from scipy.io import loadmat
 
 import jsbgym_m.properties as prp
 from jsbgym_m.aircraft import Aircraft
@@ -46,7 +43,7 @@ class Enhanced3DVisualiser(object):
     TEXT_Y_INCREMENT = -0.08
     
     # 飞机模型缩放和显示参数
-    AIRCRAFT_SCALE = 100.0  # 调整飞机图片大小
+    AIRCRAFT_SCALE = 70.0   # F-16 模型缩放因子
     TRAIL_LENGTH = 100      # 轨迹长度
     VIEW_SIZE = 5000        # 视图大小（英尺）
     
@@ -72,36 +69,40 @@ class Enhanced3DVisualiser(object):
         self.opponent_positions: List[Tuple[float, float, float]] = []
         self.opponent_attitudes: List[Tuple[float, float, float]] = []  # roll, pitch, yaw
         
-        # 存储飞机图片对象
-        self.aircraft_images = []  # 存储飞机图片对象
-        self.opponent_images = []  # 存储敌机图片对象
+        # 存储飞机 3D 模型对象
+        self.aircraft_polys = []    # 存储主机 3D 模型
+        self.opponent_polys = []    # 存储敌机 3D 模型
         
-        # 加载飞机图片
-        self._load_aircraft_image()
+        # 加载 F-16 3D 模型
+        self._load_f16_model()
         
-    def _load_aircraft_image(self):
-        """加载飞机图片"""
+    def _load_f16_model(self):
+        """加载 F-16 3D 模型数据"""
         try:
             # 尝试多个可能的路径
             possible_paths = [
-                '/home/ubuntu/Workfile/RL/RL_model/src/multiAgent/aerobench/visualize/airplane.png',
-                os.path.join(os.path.dirname(__file__), '../../src/multiAgent/aerobench/visualize/airplane.png'),
-                os.path.join(os.path.dirname(__file__), 'airplane.png'),
-                'airplane.png'
+                '/home/ubuntu/Workfile/RL/RL_model/src/multiAgent/aerobench/visualize/f-16.mat',
+                os.path.join(os.path.dirname(__file__), '../../src/multiAgent/aerobench/visualize/f-16.mat'),
+                os.path.join(os.path.dirname(__file__), 'f-16.mat'),
+                'f-16.mat'
             ]
             
-            self.airplane_img = None
+            self.f16_pts = None
+            self.f16_faces = None
+            
             for path in possible_paths:
                 if os.path.exists(path):
-                    self.airplane_img = plt.imread(path)
-                    print(f"Loaded airplane image from: {path}")
+                    data = loadmat(path)
+                    self.f16_pts = data['V']    # 顶点数据
+                    self.f16_faces = data['F']  # 面数据
+                    print(f"Loaded F-16 model from: {path}")
                     break
             
-            if self.airplane_img is None:
-                print("Warning: airplane.png not found, falling back to simple model")
+            if self.f16_pts is None:
+                print("Warning: f-16.mat not found, falling back to simple model")
                 self._create_simple_aircraft_model()
         except Exception as e:
-            print(f"Error loading airplane image: {e}")
+            print(f"Error loading F-16 model: {e}")
             self._create_simple_aircraft_model()
         
     def _create_simple_aircraft_model(self):
@@ -195,20 +196,26 @@ class Enhanced3DVisualiser(object):
         
         # 清除之前的飞机模型和轨迹
         for artist in ax.collections[:]:
-            artist.remove()
+            if hasattr(artist, '_aircraft_poly') or hasattr(artist, '_opponent_poly'):
+                artist.remove()
         for line in ax.lines[:]:
             if (hasattr(line, '_aircraft_model') or hasattr(line, '_trail') or 
                 hasattr(line, '_opponent_model') or hasattr(line, '_opponent_trail')):
                 line.remove()
         
-        # 清除之前的图片对象
-        for img_obj in self.aircraft_images + self.opponent_images:
+        # 清除之前的文字对象
+        for text in ax.texts[:]:
+            if hasattr(text, '_aircraft_label') or hasattr(text, '_opponent_label'):
+                text.remove()
+        
+        # 清除存储的多边形和文字对象
+        for obj in self.aircraft_polys + self.opponent_polys:
             try:
-                img_obj.remove()
+                obj.remove()
             except:
                 pass
-        self.aircraft_images.clear()
-        self.opponent_images.clear()
+        self.aircraft_polys.clear()
+        self.opponent_polys.clear()
                 
         # 绘制主机轨迹
         if len(self.positions) > 1:
@@ -241,22 +248,22 @@ class Enhanced3DVisualiser(object):
 
     def _draw_aircraft_model(self, ax: plt.Axes, position: Tuple[float, float, float],
                            attitude: Tuple[float, float, float], is_opponent: bool = False):
-        """绘制飞机模型 - 使用图片或线条"""
+        """绘制飞机模型 - 使用 F-16 3D 模型或线条"""
         x, y, z = position
         roll, pitch, yaw = attitude
         
         print(f"Drawing aircraft model at: ({x:.1f}, {y:.1f}, {z:.1f}), is_opponent: {is_opponent}")
         
-        # 优先使用图片方法
-        if hasattr(self, 'airplane_img') and self.airplane_img is not None:
+        # 优先使用 F-16 3D 模型
+        if hasattr(self, 'f16_pts') and self.f16_pts is not None:
             try:
-                self._draw_aircraft_image_3d(ax, position, attitude, is_opponent)
-                print("Successfully drew aircraft image in 3D")
+                self._draw_f16_model(ax, position, attitude, is_opponent)
+                print("Successfully drew F-16 3D model")
                 return
             except Exception as e:
-                print(f"Failed to draw 3D aircraft image: {e}")
+                print(f"Failed to draw F-16 3D model: {e}")
         
-        # 如果图片方法失败，使用线条模型
+        # 如果 F-16 模型失败，使用线条模型
         try:
             self._draw_aircraft_lines(ax, position, attitude, is_opponent)
             print("Successfully drew aircraft lines")
@@ -271,81 +278,93 @@ class Enhanced3DVisualiser(object):
             scatter._opponent_model = True if is_opponent else None
             print("Drew fallback scatter point")
 
-    def _draw_aircraft_image_3d(self, ax: plt.Axes, position: Tuple[float, float, float],
-                              attitude: Tuple[float, float, float], is_opponent: bool = False):
-        """在3D环境中绘制飞机图片 - 参考 aerobench 方法"""
+    def _draw_f16_model(self, ax: plt.Axes, position: Tuple[float, float, float],
+                       attitude: Tuple[float, float, float], is_opponent: bool = False):
+        """绘制 F-16 3D 模型 - 参考 anim3d.py"""
         x, y, z = position
         roll, pitch, yaw = attitude
         
-        # 计算飞机在xy平面的投影位置（类似anim.py的方法）
-        # 获取当前坐标轴的范围来计算图片大小
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
+        # 缩放 F-16 模型（参考 anim3d.py 的 scale3d 函数）
+        scale_factor = self.AIRCRAFT_SCALE * 0.3048  # 转换为米
+        pts = self._scale3d(self.f16_pts, [-scale_factor, scale_factor, scale_factor])
         
-        # 计算合适的飞机图片大小（参考anim.py中的plane_size_factor）
-        axis_range = max(xlim[1] - xlim[0], ylim[1] - ylim[0])
-        plane_size_factor = 0.02  # 调整这个值来控制飞机大小
-        size = axis_range * plane_size_factor
+        # 旋转 F-16 模型（参考 anim3d.py 的 rotate3d 函数）
+        # 注意：anim3d 中使用的是 (theta, psi - pi/2, -phi) 的顺序
+        theta = attitude[1]  # pitch
+        psi = attitude[2] - math.pi/2  # yaw，减去 pi/2 是因为模型的默认朝向
+        phi = -attitude[0]   # roll，取负号
         
-        # 计算飞机朝向角度（参考anim.py的角度计算）
-        theta_deg = -yaw * 180 / math.pi
+        pts = self._rotate3d(pts, theta, psi, phi)
         
-        # 旋转图片（参考anim.py的图片旋转）
-        img_rotated = ndimage.rotate(self.airplane_img, theta_deg, order=1, reshape=True)
+        # 平移到飞机位置
+        pts = pts + np.array([x, y, z])
         
-        # 根据是否为敌机调整图片颜色
+        # 准备绘制多边形面
+        verts = []
+        face_colors = []
+        edge_colors = []
+        
+        # 根据是否为敌机选择颜色
         if is_opponent:
-            # 将敌机图片调整为红色调
-            img_colored = img_rotated.copy()
-            if len(img_colored.shape) == 3 and img_colored.shape[2] >= 3:  # RGB图片
-                # 增强红色通道，减少其他通道
-                img_colored[:, :, 0] = np.minimum(img_colored[:, :, 0] * 1.5, 1.0)
-                img_colored[:, :, 1] = img_colored[:, :, 1] * 0.3
-                img_colored[:, :, 2] = img_colored[:, :, 2] * 0.3
+            face_color = '0.7'  # 浅灰色
+            edge_color = 'darkred'
         else:
-            img_colored = img_rotated
+            face_color = '0.2'  # 深灰色  
+            edge_color = 'darkblue'
         
-        # 计算旋转后图片的尺寸比例（参考anim.py的ratios计算）
-        original_size = list(self.airplane_img.shape)
-        rotated_size = list(img_rotated.shape)
-        ratios = [r / o for r, o in zip(rotated_size, original_size)]
+        # 构建面片（参考 anim3d.py 的面片构建）
+        count = 0
+        for face in self.f16_faces:
+            count += 1
+            
+            # 可以跳过一些面片来提高性能
+            if count % 5 != 0:  # 只绘制每第5个面
+                continue
+                
+            face_pts = []
+            for findex in face:
+                if findex-1 < len(pts):  # 确保索引有效
+                    face_pts.append(tuple(pts[findex-1]))
+            
+            if len(face_pts) >= 3:  # 确保至少有3个点形成面
+                verts.append(face_pts)
+                face_colors.append(face_color)
+                edge_colors.append(edge_color)
         
-        # 计算最终图片的宽度和高度
-        width = size * ratios[1] if len(ratios) > 1 else size
-        height = size * ratios[0] if len(ratios) > 0 else size
+        # 创建并添加 Poly3DCollection
+        if verts:
+            poly_collection = Poly3DCollection(verts, 
+                                             facecolors=face_colors,
+                                             edgecolors=edge_colors,
+                                             alpha=0.8,
+                                             linewidths=0.5)
+            
+            # 标记多边形对象以便后续清理
+            poly_collection._aircraft_poly = True if not is_opponent else None
+            poly_collection._opponent_poly = True if is_opponent else None
+            
+            ax.add_collection3d(poly_collection)
+            
+            # 保存多边形对象引用
+            if is_opponent:
+                self.opponent_polys.append(poly_collection)
+            else:
+                self.aircraft_polys.append(poly_collection)
         
-        # 创建BboxImage对象（参考anim.py的方法）
-        box = Bbox.from_bounds(x - width/2, y - height/2, width, height)
-        tbox = TransformedBbox(box, ax.transData)
-        box_image = BboxImage(tbox, zorder=10, alpha=0.8)
-        box_image.set_data(img_colored)
-        
-        # 将图片添加到坐标轴
-        ax.add_artist(box_image)
-        
-        # 保存图片对象引用以便后续清理
-        if is_opponent:
-            self.opponent_images.append(box_image)
-        else:
-            self.aircraft_images.append(box_image)
-        
-        # 添加高度指示线（从地面到飞机位置）
-        height_line = ax.plot([x, x], [y, y], [0, z], 
-                            'r:' if is_opponent else 'b:', 
-                            alpha=0.6, linewidth=2)[0]
-        height_line._aircraft_model = True if not is_opponent else None
-        height_line._opponent_model = True if is_opponent else None
-        
-        # 添加飞机标签（在3D空间中显示）
+        # 添加飞机标签 - 修正标记属性
         label = "Enemy" if is_opponent else "Own"
         color = 'red' if is_opponent else 'blue'
         text = ax.text(x, y, z + 100, label, fontsize=12, color=color, 
                       ha='center', va='bottom', weight='bold')
-        if is_opponent:
-            self.opponent_images.append(text)
-        else:
-            self.aircraft_images.append(text)
         
+        # 正确标记文字对象
+        if is_opponent:
+            text._opponent_label = True
+            self.opponent_polys.append(text)
+        else:
+            text._aircraft_label = True
+            self.aircraft_polys.append(text)
+
     def _draw_aircraft_lines(self, ax: plt.Axes, position: Tuple[float, float, float],
                            attitude: Tuple[float, float, float], is_opponent: bool = False):
         """使用线条绘制飞机模型（备用方案） - 添加调试信息"""
@@ -364,6 +383,15 @@ class Enhanced3DVisualiser(object):
                                edgecolors='black', linewidth=3, alpha=0.9)
             scatter._aircraft_model = True if not is_opponent else None
             scatter._opponent_model = True if is_opponent else None
+            
+            # 添加标签 - 确保正确标记
+            label = "Enemy" if is_opponent else "Own"
+            text = ax.text(x, y, z + 100, label, fontsize=12, color=color, 
+                          ha='center', va='bottom', weight='bold')
+            if is_opponent:
+                text._opponent_label = True
+            else:
+                text._aircraft_label = True
             return
         
         # 创建旋转矩阵
@@ -396,20 +424,53 @@ class Enhanced3DVisualiser(object):
             line = ax.plot3D(world_points[:, 0], world_points[:, 1], world_points[:, 2],
                            color=colors[part_name], linewidth=linewidth, linestyle=line_style)[0]
             setattr(line, marker_attr, True)  # 动态设置标记属性
-
-    def _create_rotation_matrix(self, roll: float, pitch: float, yaw: float) -> np.ndarray:
-        """创建欧拉角旋转矩阵（ZYX顺序）"""
-        cr, sr = math.cos(roll), math.sin(roll)
-        cp, sp = math.cos(pitch), math.sin(pitch) 
-        cy, sy = math.cos(yaw), math.sin(yaw)
         
-        # ZYX欧拉角旋转矩阵
-        R = np.array([
-            [cy*cp, cy*sp*sr - sy*cr, cy*sp*cr + sy*sr],
-            [sy*cp, sy*sp*sr + cy*cr, sy*sp*cr - cy*sr],
-            [-sp, cp*sr, cp*cr]
-        ])
-        return R
+        # 添加标签 - 确保正确标记
+        label = "Enemy" if is_opponent else "Own"
+        color = 'red' if is_opponent else 'blue'
+        text = ax.text(x, y, z + 100, label, fontsize=12, color=color, 
+                      ha='center', va='bottom', weight='bold')
+        if is_opponent:
+            text._opponent_label = True
+        else:
+            text._aircraft_label = True
+
+    def _scale3d(self, pts: np.ndarray, scale_list: List[float]) -> np.ndarray:
+        """缩放 3D 点云 - 参考 anim3d.py"""
+        assert len(scale_list) == 3
+        
+        rv = np.zeros(pts.shape)
+        
+        for i in range(pts.shape[0]):
+            for d in range(3):
+                rv[i, d] = scale_list[d] * pts[i, d]
+                
+        return rv
+
+    def _rotate3d(self, pts: np.ndarray, theta: float, psi: float, phi: float) -> np.ndarray:
+        """旋转 3D 点云 - 参考 anim3d.py"""
+        sinTheta = math.sin(theta)
+        cosTheta = math.cos(theta)
+        sinPsi = math.sin(psi)
+        cosPsi = math.cos(psi)
+        sinPhi = math.sin(phi)
+        cosPhi = math.cos(phi)
+
+        transform_matrix = np.array([
+            [cosPsi * cosTheta, -sinPsi * cosTheta, sinTheta],
+            [cosPsi * sinTheta * sinPhi + sinPsi * cosPhi,
+             -sinPsi * sinTheta * sinPhi + cosPsi * cosPhi,
+             -cosTheta * sinPhi],
+            [-cosPsi * sinTheta * cosPhi + sinPsi * sinPhi,
+             sinPsi * sinTheta * cosPhi + cosPsi * sinPhi,
+             cosTheta * cosPhi]], dtype=float)
+
+        rv = np.zeros(pts.shape)
+
+        for i in range(pts.shape[0]):
+            rv[i] = np.dot(pts[i], transform_matrix)
+
+        return rv
         
     def _draw_ground_grid(self, ax: plt.Axes, center_x: float, center_y: float, size: float):
         """绘制地面网格（优化版）"""
