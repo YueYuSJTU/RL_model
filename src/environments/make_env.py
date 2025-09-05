@@ -5,6 +5,7 @@ from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.env_util import make_vec_env
 from src.utils.yaml_import import import_class
 from src.environments.NN_vec_env import NNVecEnv
+from src.environments.wrap_env import create_wrapper_from_config
 import os
 import sys
 # # 将项目根目录添加到sys.path（使用相对路径）
@@ -27,7 +28,8 @@ def create_env(
     task = env_config["task"]
     shape = env_config["shape"]
     render_mode = env_config.get("render_mode")
-    wrappers = env_config.get("wrappers") if "wrappers" in env_config else None
+    wrapper_configs = env_config.get("wrappers") if "wrappers" in env_config else None
+    combined_wrapper_class = create_wrapper_from_config(wrapper_configs)
     
     env_id = f"{plane}-{task}-{shape}-NoFG-v0"
     if render_mode == "flightgear":
@@ -39,7 +41,7 @@ def create_env(
         vec_env = make_vec_env(
             env_id, 
             n_envs=num_cpu, 
-            wrapper_kwargs={"wrappers": wrappers}, 
+            wrapper_class=combined_wrapper_class,
             vec_env_cls=NNVecEnv, 
             vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}
@@ -50,7 +52,7 @@ def create_env(
         vec_env = make_vec_env(
             env_id, 
             n_envs=1, 
-            wrapper_kwargs={"wrappers": wrappers}, 
+            wrapper_class=combined_wrapper_class,
             vec_env_cls=NNVecEnv,
             vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}

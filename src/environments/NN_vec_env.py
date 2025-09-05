@@ -74,9 +74,12 @@ class NNVecEnv(SubprocVecEnv):
         # 加载选择的敌机策略
         self.opponent_models = []
         # self.opponent_envs = []
+        self.opponent_env_config = []
         for root in self.opponent_model_roots:
             model = self._load_opponent_model(root)
             self.opponent_models.append(model)
+            env_config = self._load_opponent_env_config(root)
+            self.opponent_env_config.append(env_config)
             # self.opponent_envs.append(env)
         
         # 为每个子环境分配一个随机的初始策略
@@ -85,20 +88,36 @@ class NNVecEnv(SubprocVecEnv):
         
 
     def _get_space(self, observation_space: Box, action_space: Box) -> Tuple[Box, Box]:
-        """设置环境的观察空间和动作空间"""
-        # 创建减半的观察空间和动作空间
+        """
+        设置环境的观察空间和动作空间。
+        通过操作最后一个维度来分割空间，以支持多维观察空间。
+        """
+        # --- 观察空间减半 ---
+        obs_shape = observation_space.shape
+        # 总是分割最后一个维度
+        obs_split_dim = obs_shape[-1] // 2
+        # 构建新的shape，保留前面所有维度，只修改最后一个维度
+        new_obs_shape = obs_shape[:-1] + (obs_split_dim,)
+
+        # 使用 Ellipsis (...) 进行切片，以兼容任意维度
+        # 适用于 low/high 是一个标量或者一个与原空间同shape的数组的情况
+        obs_low = observation_space.low[..., :obs_split_dim]
+        obs_high = observation_space.high[..., :obs_split_dim]
         
-        # 观察空间减半
-        obs_dim = observation_space.shape[0] // 2
-        obs_low = observation_space.low[:obs_dim]
-        obs_high = observation_space.high[:obs_dim]
-        half_observation_space = Box(low=obs_low, high=obs_high, dtype=observation_space.dtype)
+        half_observation_space = Box(low=obs_low, high=obs_high, shape=new_obs_shape, dtype=observation_space.dtype)
         
-        # 动作空间减半
-        act_dim = action_space.shape[0] // 2
-        act_low = action_space.low[:act_dim]
-        act_high = action_space.high[:act_dim]
-        half_action_space = Box(low=act_low, high=act_high, dtype=action_space.dtype)
+        # --- 动作空间减半 ---
+        act_shape = action_space.shape
+        # 总是分割最后一个维度
+        act_split_dim = act_shape[-1] // 2
+        # 构建新的shape
+        new_act_shape = act_shape[:-1] + (act_split_dim,)
+        
+        # 使用 Ellipsis (...) 进行切片
+        act_low = action_space.low[..., :act_split_dim]
+        act_high = action_space.high[..., :act_split_dim]
+        
+        half_action_space = Box(low=act_low, high=act_high, shape=new_act_shape, dtype=action_space.dtype)
         
         return half_observation_space, half_action_space
     
@@ -168,6 +187,21 @@ class NNVecEnv(SubprocVecEnv):
     
         return model
     
+    def _load_opponent_env_config(self, model_path: str) -> dict:
+        """加载单个敌机策略的环境配置"""
+        import yaml
+
+        config_file = os.path.join(model_path, "env_config.yaml")
+
+        if not os.path.exists(config_file):
+            raise ValueError(f"Config file {config_file} does not exist.")
+        
+        # 加载配置
+        with open(config_file, encoding="utf-8") as f:
+            env_config = yaml.safe_load(f)
+        
+        return env_config
+    
     def _get_opponent_action(self, obs: np.ndarray) -> np.ndarray:
         """批量获取所有子环境的对手动作，每个子环境使用其对应的策略"""
         if self.model_num == -1:
@@ -192,6 +226,18 @@ class NNVecEnv(SubprocVecEnv):
             
             # 提取这些环境的观察值
             strategy_obs = obs[env_indices]
+
+            # 检查对手环境配置是否使用了ContinueObservation
+            has_continue_wrapper = False
+            if "wrappers" in self.opponent_env_config[strategy_idx]:
+                for wrapper in self.opponent_env_config[strategy_idx]["wrappers"]:
+                    if isinstance(wrapper, dict) and wrapper.get("name") == "src.environments.ContinueWrapper:ContinueObservation":
+                        has_continue_wrapper = True
+                        break
+            
+            # 如果对手环境不使用ContinueObservation但观察值是三维的(时间序列)，取最后一个时间步
+            if not has_continue_wrapper and len(strategy_obs.shape) == 3:
+                strategy_obs = strategy_obs[:, -1, :]  # 只取最新的观察值
             
             # 标准化观察值
             # normalized_obs = vec_env.normalize_obs(strategy_obs)
@@ -249,10 +295,16 @@ class NNVecEnv(SubprocVecEnv):
         return agent_obs
 
     def _get_observation(self, obs: np.ndarray, object: str = "agent") -> np.ndarray:
-        """获取前半段或后半段观察值"""
+        """
+        获取前半段或后半段观察值。
+        通过操作最后一个维度来分割，以支持多维观察值。
+        """
+        # 总是沿着最后一个维度进行分割
+        split_point = obs.shape[-1] // 2
+        
         if object == "agent":
-            return obs[:, :obs.shape[1] // 2]
+            return obs[..., :split_point]
         elif object == "opponent":
-            return obs[:, obs.shape[1] // 2:]
+            return obs[..., split_point:]
         else:
             raise ValueError(f"Invalid object type: {object}. Use 'agent' or 'opponent'.")

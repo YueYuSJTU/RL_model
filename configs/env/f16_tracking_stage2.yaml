@@ -7,3 +7,9 @@ use_vec_normalize: True
 norm_obs: True
 norm_reward: True
 clip_obs: 10.0
+
+wrappers:
+  - name: "src.environments.ContinueWrapper:ContinueObservation"
+    kwargs:
+      skip_frame: 2
+      total_frame: 10
