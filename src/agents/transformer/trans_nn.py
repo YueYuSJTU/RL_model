@@ -1,80 +1,184 @@
 import torch
 import torch.nn as nn
+import math
+from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+
+class PositionalEncoding(nn.Module):
+    """
+    Helper class for adding positional encoding to the input embeddings.
+    This allows the Transformer to understand the sequence order.
+    Implementation is based on the PyTorch tutorials.
+    """
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        # Transpose to (1, max_len, d_model) for easier addition with batch_first=True tensors
+        pe = pe.transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        # x.size(1) is the sequence length
+        x = x + self.pe[:, :x.size(1), :]
+        return self.dropout(x)
+
 
 class TransformerFeatureExtractor(BaseFeaturesExtractor):
     """
-    基于Transformer的特征提取器，适用于输入为时序数据的情形。
-    假设观测数据形状为 (batch_size, seq_length, obs_dim)
+    Feature extractor using a Transformer architecture based on the provided diagram.
+
+    It consists of:
+    1. An Embedding Network (MLP) to project input features.
+    2. A Positional Encoding layer to inject sequence information.
+    3. A Transformer with 2 Encoder layers followed by 2 Decoder layers.
+    4. A final Linear layer to produce the feature vector of desired size.
     """
-    def __init__(self, observation_space, features_dim=256, seq_length=10, 
-                 d_model=64, nhead=8, num_layers=2, dropout=0.1):
-        """
-        :param observation_space: 环境的观测空间，其shape应该为 (seq_length, obs_dim)
-        :param features_dim: 最终输出特征的维度，需与PPO网络后续MLP的输入尺寸匹配
-        :param seq_length: 序列长度，即时间步数
-        :param d_model: Transformer中每个token的特征维度
-        :param nhead: 多头注意力机制的头数
-        :param num_layers: Transformer Encoder层数
-        :param dropout: dropout概率
-        """
-        super(TransformerFeatureExtractor, self).__init__(observation_space, features_dim)
-        
-        # 假设observation_space的shape为 (seq_length, obs_dim)
-        self.seq_length = seq_length
-        self.obs_dim = observation_space.shape[-1]
-        
-        # 1. 嵌入层：将原始观测投影到d_model维度
-        self.embedding = nn.Linear(self.obs_dim, d_model)
-        
-        # 2. 位置编码：使用函数计算位置编码
-        self.pos_embedding = self._generate_positional_encoding(seq_length, d_model)
-        
-        # 3. Transformer Encoder层
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
+    def __init__(self, observation_space: spaces.Box, features_dim: int = 256):
+        # The output dimension of the final features vector is specified by features_dim.
+        super().__init__(observation_space, features_dim)
+
+        # Ensure the observation space is a 2D Box (sequence, features)
+        assert len(observation_space.shape) == 2, (
+            f"Expected a 2D observation space, but got {observation_space.shape}"
         )
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         
-        # 4. 池化层：对Transformer输出的时序信息做聚合
-        # 这里采用平均池化，可以根据需要调整为其他方式（如取CLS token、最大池化等）
-        self.pooling = nn.AdaptiveAvgPool1d(1)
+        seq_len, in_features = observation_space.shape
+
+        # --- Model Hyperparameters from the user's description ---
+        d_model = 128  # The dimension of the transformer embeddings
+        nhead = 4      # Number of heads in the multi-head attention
+        d_ff = 128     # Hidden dimension of the feed-forward network
+        n_encoders = 2 # Number of encoder layers
+        n_decoders = 2 # Number of decoder layers
+        dropout = 0.1  # A standard dropout rate
+
+        # --- 1. Embedding Network ---
+        # As described: two hidden layers with 64 neurons each (ReLU activation)
+        # Input matches the observation space (in_features=58)
+        # Output matches the transformer's model dimension (d_model=128)
+        self.embedding_net = nn.Sequential(
+            nn.Linear(in_features, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, d_model)
+        )
+
+        # --- Positional Encoding ---
+        self.pos_encoder = PositionalEncoding(d_model, dropout=dropout, max_len=seq_len)
+
+        # --- 2. Encoder Network ---
+        # PyTorch's TransformerEncoderLayer encapsulates one full encoder block
+        # (Multi-Head Attention -> Add & Norm -> Feed Forward -> Add & Norm)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_ff,
+            dropout=dropout,
+            activation='relu',
+            batch_first=True  # Important for SB3: (Batch, Sequence, Features)
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=n_encoders
+        )
+
+        # --- 3. Decoder Network ---
+        # PyTorch's TransformerDecoderLayer encapsulates one full decoder block
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_ff,
+            dropout=dropout,
+            activation='relu',
+            batch_first=True
+        )
+        self.transformer_decoder = nn.TransformerDecoder(
+            decoder_layer, num_layers=n_decoders
+        )
         
-        # 5. 最终投影：将d_model维度映射到features_dim，使其兼容后续MLP部分
-        self.fc = nn.Linear(d_model, features_dim)
-    
-    def _generate_positional_encoding(self, seq_length, d_model):
-        """
-        生成位置编码
-        :param seq_length: 序列长度
-        :param d_model: 特征维度
-        :return: 位置编码张量，形状为 (1, seq_length, d_model)
-        """
-        position = torch.arange(0, seq_length, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
-        pos_encoding = torch.zeros((seq_length, d_model))
-        pos_encoding[:, 0::2] = torch.sin(position * div_term)
-        pos_encoding[:, 1::2] = torch.cos(position * div_term)
-        return pos_encoding.unsqueeze(0)
-    
+        # --- 4. Final Output Layer ---
+        # The transformer's output will be a sequence of embeddings (batch, seq_len, d_model).
+        # We flatten this sequence and project it to the final desired `features_dim`.
+        flattened_dim = seq_len * d_model
+        self.linear_out = nn.Linear(flattened_dim, features_dim)
+
     def forward(self, observations: torch.Tensor) -> torch.Tensor:
         """
-        :param observations: shape (batch_size, seq_length, obs_dim)
-        :return: shape (batch_size, features_dim)
+        Main forward pass for feature extraction.
+        
+        Args:
+            observations: The input tensor from the environment.
+                          Shape: (batch_size, seq_len, in_features) -> (N, 10, 58)
+        
+        Returns:
+            A flattened feature tensor.
+            Shape: (batch_size, features_dim)
         """
-        # 嵌入
-        x = self.embedding(observations)  # (batch_size, seq_length, d_model)
         
-        # 添加位置编码（广播相加）
-        x = x + self.pos_embedding  # (batch_size, seq_length, d_model)
+        # 1. Apply embedding network to each time step's features
+        # Input: (N, 10, 58) -> Output: (N, 10, 128)
+        embedded_obs = self.embedding_net(observations)
         
-        # Transformer Encoder处理时序信息
-        x = self.transformer_encoder(x)  # (batch_size, seq_length, d_model)
+        # Add positional encoding to give the model sequence information
+        # Input: (N, 10, 128) -> Output: (N, 10, 128)
+        pos_encoded_obs = self.pos_encoder(embedded_obs)
+
+        # 2. Pass through the stack of 2 Encoder layers
+        # Input: (N, 10, 128) -> Output: (N, 10, 128)
+        encoder_output = self.transformer_encoder(pos_encoded_obs)
+
+        # 3. Pass through the stack of 2 Decoder layers
+        # For this feature extraction task, the encoder's output serves as both
+        # the target sequence (`tgt`) and the memory context (`memory`) for the decoder.
+        # Input: tgt=(N, 10, 128), memory=(N, 10, 128) -> Output: (N, 10, 128)
+        decoder_output = self.transformer_decoder(tgt=encoder_output, memory=encoder_output)
         
-        # 池化：先变换维度为 (batch_size, d_model, seq_length)
-        x = x.transpose(1, 2)
-        x = self.pooling(x).squeeze(-1)  # (batch_size, d_model)
+        # 4. Flatten the final sequence and project to the desired feature dimension
+        # Flatten: (N, 10, 128) -> (N, 1280)
+        flattened_output = torch.flatten(decoder_output, start_dim=1)
         
-        # 最终投影
-        features = self.fc(x)  # (batch_size, features_dim)
+        # Final linear projection: (N, 1280) -> (N, features_dim)
+        features = self.linear_out(flattened_output)
+        
         return features
+
+# --- Example Usage ---
+if __name__ == '__main__':
+    # Define an observation space that matches your environment
+    # Box(-1, 1, (10, 58)) means a sequence of 10 items, each with 58 features.
+    obs_space = spaces.Box(low=-1.0, high=1.0, shape=(10, 58))
+    
+    # Instantiate the feature extractor
+    # You can choose the final output dimension, e.g., 256
+    transformer_extractor = TransformerFeatureExtractor(observation_space=obs_space, features_dim=256)
+    
+    # Print the model to inspect its architecture
+    print(transformer_extractor)
+    
+    # Create a dummy batch of observations (e.g., batch size of 4)
+    dummy_obs = torch.randn(4, 10, 58)
+    
+    # Pass the dummy data through the extractor
+    extracted_features = transformer_extractor(dummy_obs)
+    
+    # Check the output shape
+    # It should be (batch_size, features_dim) -> (4, 256)
+    print(f"\nInput shape: {dummy_obs.shape}")
+    print(f"Output features shape: {extracted_features.shape}")
+
+    # You would then pass this class to your SB3 policy definition, for example:
+    # policy_kwargs = dict(
+    #     features_extractor_class=TransformerFeatureExtractor,
+    #     features_extractor_kwargs=dict(features_dim=256),
+    # )
+    # model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs, verbose=1)
