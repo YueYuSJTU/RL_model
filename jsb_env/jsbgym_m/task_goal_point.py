@@ -43,14 +43,27 @@ class GoalPointTask(TrackingTask):
         aircraft: Aircraft,
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
+        goal_point_mode: str = 'dynamic'  # 'static' or 'dynamic'
     ):
         """
         Constructor.
 
         :param step_frequency_hz: the number of agent interaction steps per second
         :param aircraft: the aircraft used in the simulation
+        :param goal_point_mode: The movement mode of the goal point.
         """
-        super().__init__()
+        
+        self.extra_state_variables = (
+            self.distance_oppo_ft,
+            self.track_angle_rad,
+            self.bearing_accountingRollPitch_rad,
+            self.elevation_accountingRollPitch_rad,
+            self.bearing_pointMass_rad,
+            self.elevation_pointMass_rad,
+            # goal point模式下不存在adverse_angle
+            # adverse_angle_rad,
+            self.closure_rate,
+        )
         self.state_variables = (
             FlightTask.base_state_variables
             + self.tracking_state_variables
@@ -58,7 +71,17 @@ class GoalPointTask(TrackingTask):
             # + self.oppo_state_variables
             + self.action_variables
         )
+        super().__init__(
+            shaping_type=shaping_type,
+            step_frequency_hz=step_frequency_hz,
+            aircraft=aircraft,
+            episode_time_s=episode_time_s,
+            positive_rewards=positive_rewards,
+        )
         self.opponent = self._create_opponent(model="goal_point")
+        self.goal_point_mode = goal_point_mode
+        # self.goal_point_position = np.array([5000.0, 5000.0, 5000.0])
+        # self.goal_point_velocity = np.array([400.0, 0.0, 0.0])
     
     def _create_opponent(self, model: str = "goal_point"):
         """
@@ -66,6 +89,8 @@ class GoalPointTask(TrackingTask):
         """
         if model == "goal_point":
             return model
+        elif model == "jsbsim":
+            return "jsbsim"
         else:
             raise ValueError("Unsupported opponent model: {}".format(model))
     
@@ -84,31 +109,40 @@ class GoalPointTask(TrackingTask):
             if stage_number == 1:
                 base_components = (
                     rewards.ScaledAsymptoticErrorComponent(
-                        name="small_action",
-                        prop=prp.aileron_cmd,
+                        name="distance_reward",
+                        prop=self.distance_oppo_ft,
                         state_variables=self.state_variables,
                         is_potential_based=False,
                         target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
+                        scaling_factor=-1.0 / 1000.0,  # Negative for reward
+                        cmp_scale=2.0,
                     ),
                     rewards.ScaledAsymptoticErrorComponent(
-                        name="small_thrust",
-                        prop=prp.throttle_cmd,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.4,
-                        scaling_factor=0.1,
-                        cmp_scale=8.0,
-                    ),
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_roll",
-                        prop=prp.roll_rad,
+                        name="heading_error",
+                        prop=self.track_angle_rad,
                         state_variables=self.state_variables,
                         is_potential_based=False,
                         target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
+                        scaling_factor=0.2,
+                        cmp_scale=1.0,
+                    ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="altitude_error",
+                        prop=prp.altitude_sl_ft,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=5000.0,  # target altitude
+                        scaling_factor=1.0 / 2000.0,
+                        cmp_scale=1.0,
+                    ),
+                    rewards.ScaledAsymptoticErrorComponent(
+                        name="velocity_error",
+                        prop=prp.vtrue_fps,
+                        state_variables=self.state_variables,
+                        is_potential_based=False,
+                        target=self.aircraft.get_cruise_speed_fps(),
+                        scaling_factor=1.0 / 100.0,
+                        cmp_scale=1.0,
                     ),
                 )
                 shaping_components = (
@@ -118,56 +152,7 @@ class GoalPointTask(TrackingTask):
                         state_variables=self.state_variables,
                         is_potential_based=True,
                         list_length=10,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.SmoothingComponent(
-                        name="altitude_contain",
-                        props=[prp.altitude_sl_ft],
-                        state_variables=self.state_variables,
-                        is_potential_based=True,
-                        list_length=20,
-                        cmp_scale=80000.0,
-                    ),
-                )
-            elif stage_number == 2:
-                base_components = (
-                    rewards.UserDefinedComponent(
-                        name = "relative_position",
-                        func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
-                        props=(self.track_angle_rad, self.adverse_angle_rad),
-                        state_variables=self.state_variables,
-                        cmp_scale=1.0
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="closure_rate",
-                        func=lambda closure, adverse, distance:
-                            closure/500 * (1-logistic(adverse/(math.pi),18,0.5)) * logistic(distance,1/500,2900),
-                        props=(self.closure_rate, self.adverse_angle_rad, self.distance_oppo_ft),
-                        state_variables=self.state_variables,
-                        cmp_scale=1.0
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="gunsnap_blue",
-                        func=lambda distance, track:
-                            GammaB(distance) * (1 - logistic(track/(math.pi), 1e5, 1/180)),
-                        props=(self.distance_oppo_ft, self.track_angle_rad),
-                        state_variables=self.state_variables,
-                        cmp_scale=1.0
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="gunsnap_red",
-                        func=lambda distance, adverse:
-                            -GammaR(distance) * logistic(adverse/(math.pi), 800, 178/180),
-                        props=(self.distance_oppo_ft, self.adverse_angle_rad),
-                        state_variables=self.state_variables,
-                        cmp_scale=1.0
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck",
-                        func=lambda h: -4 * (1-logistic(h, 1/20, 1300)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=1.0
+                        cmp_scale=0.5,
                     ),
                 )
             if not base_components and not shaping_components:
@@ -233,7 +218,7 @@ class GoalPointTask(TrackingTask):
 
         self._update_custom_properties(sim, opponent_sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
-        opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
+        opponent_state = np.zeros_like(state)
         terminated = self._is_terminal(sim, opponent_sim)
         truncated = False
         reward = self.assessor.assess(state, self.last_state, terminated)
@@ -257,8 +242,13 @@ class GoalPointTask(TrackingTask):
 
         return observation, reward.agent_reward(), terminated, False, info
     
-    def update_goal_point():
-        pass
+    def update_goal_point(self):
+        if self.goal_point_mode == 'dynamic':
+            # Update position based on velocity
+            dt = 1.0 / self.step_frequency_hz
+            self.goal_point_position += self.goal_point_velocity * dt
+        # For 'static' mode, do nothing, position remains constant
+        return self.goal_point_position
 
     # def observation_normalization(self, observation: np.ndarray) -> np.ndarray:
     #     """
@@ -293,31 +283,31 @@ class GoalPointTask(TrackingTask):
         
     #     return normalized_obs
 
-    # def get_opponent_initial_conditions(self) -> Dict[Property, float]:
-    #     """
-    #     Get the initial conditions for the opponent aircraft.
-    #     """
-    #     base_oppo_initial_conditions = (
-    #         types.MappingProxyType(  # MappingProxyType makes dict immutable
-    #             {
-    #                 prp.initial_altitude_ft: 5000,
-    #                 prp.initial_terrain_altitude_ft: 0.00000001,
-    #                 prp.initial_longitude_geoc_deg: -2.3273,
-    #                 prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
-    #             }
-    #         )
-    #     )
-    #     extra_conditions = {
-    #         prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(), # 这里后续应该改成目标飞机的巡航速度
-    #         prp.initial_v_fps: 0,
-    #         prp.initial_w_fps: 0,
-    #         prp.initial_p_radps: 0,
-    #         prp.initial_q_radps: 0,
-    #         prp.initial_r_radps: 0,
-    #         prp.initial_roc_fpm: 0,
-    #         prp.initial_heading_deg: 180,
-    #     }
-    #     return {**base_oppo_initial_conditions, **extra_conditions}
+    def get_opponent_initial_conditions(self) -> Dict[Property, float]:
+        """
+        Get the initial conditions for the opponent aircraft.
+        """
+        base_oppo_initial_conditions = (
+            types.MappingProxyType(  # MappingProxyType makes dict immutable
+                {
+                    prp.initial_altitude_ft: 5000,
+                    prp.initial_terrain_altitude_ft: 0.00000001,
+                    prp.initial_longitude_geoc_deg: -2.3273,
+                    prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
+                }
+            )
+        )
+        extra_conditions = {
+            prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(), # 这里后续应该改成目标飞机的巡航速度
+            prp.initial_v_fps: 0,
+            prp.initial_w_fps: 0,
+            prp.initial_p_radps: 0,
+            prp.initial_q_radps: 0,
+            prp.initial_r_radps: 0,
+            prp.initial_roc_fpm: 0,
+            prp.initial_heading_deg: 180,
+        }
+        return {**base_oppo_initial_conditions, **extra_conditions}
 
 
     # def get_initial_conditions(self) -> Dict[Property, float]:
@@ -355,6 +345,11 @@ class GoalPointTask(TrackingTask):
         # sim[self.ned_Zposition_ft] = self_position[2]
 
         if opponent_sim is not None:
+            self.goal_point_position = np.array([
+                opponent_sim[self.ned_Xposition_ft],
+                opponent_sim[self.ned_Yposition_ft],
+                opponent_sim[prp.altitude_sl_ft]
+            ])
             opponent_position = self.update_goal_point()
             opponent_sim[self.ned_Xposition_ft] = opponent_position[0]
             opponent_sim[self.ned_Yposition_ft] = opponent_position[1]
@@ -540,35 +535,61 @@ class GoalPointTask(TrackingTask):
         # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward
 
-    # def observe_first_state(self, sim: Simulation, opponent_sim: Simulation=None) -> np.ndarray:
-    #     self._new_episode_init(sim, opponent_sim)
-    #     self._update_custom_properties(sim, opponent_sim)
-    #     state = self.State(*(sim[prop] for prop in self.state_variables))
-    #     self.last_state = state
-    #     opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
-    #     observation = np.concatenate([np.array(state), np.array(opponent_state)])
-    #     observation = self.observation_normalization(observation)
-    #     return observation
+    def observe_first_state(self, sim: Simulation, opponent_sim: Simulation=None) -> np.ndarray:
+        self._new_episode_init(sim, opponent_sim)
+        self._update_custom_properties(sim, opponent_sim)
+        state = self.State(*(sim[prop] for prop in self.state_variables))
+        self.last_state = state
+        # opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
+        opponent_state = np.zeros_like(state)
+        observation = np.concatenate([np.array(state), np.array(opponent_state)])
+        observation = self.observation_normalization(observation)
+        return observation
 
-    # def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
-    #     super()._new_episode_init(sim)
-    #     sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
-    #     sim[self.steps_left] = self.steps_left.max
-    #     opponent_sim[self.steps_left] = self.steps_left.max
-    #     self.init_ecef_position = [sim[prp.ecef_x_ft], 
-    #                                sim[prp.ecef_y_ft], 
-    #                                sim[prp.ecef_z_ft]]
-    #     lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
-    #     self.coordinate_transform.setNEDorigin(*lla_position)
-    #     sim[self.aircraft_HP] = self.HP
-    #     opponent_sim[self.aircraft_HP] = self.HP
+    def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
+        super()._new_episode_init(sim, opponent_sim)
+        sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
+        sim[self.steps_left] = self.steps_left.max
+        
+        self.init_ecef_position = [sim[prp.ecef_x_ft], 
+                                   sim[prp.ecef_y_ft], 
+                                   sim[prp.ecef_z_ft]]
+        lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
+        self.coordinate_transform.setNEDorigin(*lla_position)
+        sim[self.aircraft_HP] = self.HP
 
-    #     if isinstance(self.opponent, Opponent):
-    #         self.opponent.reset()
-    #     elif self.opponent == "jsbsim":
-    #         if opponent_sim is None:
-    #             raise ValueError("Opponent_sim is None. You should give it when restart a new episode.")
-    #         super()._new_episode_init(opponent_sim)
+        # Initialize goal point
+        if opponent_sim is not None:
+            # Set opponent sim's initial state so it can be used for storage
+            self.goal_point_position = self.coordinate_transform.ecef2ned(
+                opponent_sim[prp.ecef_x_ft],
+                opponent_sim[prp.ecef_y_ft],
+                opponent_sim[prp.ecef_z_ft]
+            )
+            opponent_sim[self.ned_Xposition_ft] = self.goal_point_position[0]
+            opponent_sim[self.ned_Yposition_ft] = self.goal_point_position[1]
+            
+            if self.goal_point_mode == 'dynamic':
+                # Random velocity similar to an aircraft's cruise speed
+                cruise_speed_fps = self.aircraft.get_cruise_speed_fps()
+                speed = random.uniform(cruise_speed_fps * 0.5, cruise_speed_fps * 1.2)
+                # Random direction in 3D
+                phi = random.uniform(0, 2 * math.pi) # Azimuth
+                theta = random.uniform(-math.pi/6, math.pi/6) # Elevation
+                self.goal_point_velocity = np.array([
+                    speed * math.cos(theta) * math.cos(phi),
+                    speed * math.cos(theta) * math.sin(phi),
+                    speed * math.sin(theta)
+                ])
+            else: # static
+                self.goal_point_velocity = np.array([0.0, 0.0, 0.0])
+            
+            opponent_sim[self.steps_left] = self.steps_left.max
+        
+        if self.opponent == "jsbsim":
+            if opponent_sim is None:
+                raise ValueError("Opponent_sim is None. You should give it when restart a new episode.")
+            # super()._new_episode_init(opponent_sim) # We manually init opponent_sim above
 
     # def get_props_to_output(self) -> Tuple:
     #     return (
@@ -609,239 +630,4 @@ def GammaR(distance):
 
 def betaR(distance):
     return -2.5
-
-
-class TrackingInitTask(TrackingTask):
-    """
-    A task for opponent agent training.
-    It needs random input, and will give different mode of opponent aircraft.
-    """
-
-    def make_assessor(self, shaping_type: Shaping) -> assessors.AssessorImpl:
-        """
-        Create the assessor for the task.
-
-        :param shaping_type: the type of shaping to use
-        :return: the assessor
-        """
-        if Shaping.is_stage_type(shaping_type):
-            stage_number = int(shaping_type[5:])  # 提取数字部分
-            base_components = ()
-            shaping_components = ()
-
-            if stage_number == 1:
-                base_components = (
-                    # rewards.ScaledAsymptoticErrorComponent(
-                    #     name="small_action",
-                    #     prop=prp.aileron_cmd,
-                    #     state_variables=self.state_variables,
-                    #     is_potential_based=False,
-                    #     target=0.0,
-                    #     scaling_factor=0.5,
-                    #     cmp_scale=4.0,
-                    # ),
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_thrust",
-                        prop=prp.throttle_cmd,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.5,
-                        scaling_factor=0.1,
-                        cmp_scale=8.0,
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck1",
-                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=2.0
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck2",
-                        func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=2.0
-                    ),
-                )
-                shaping_components = (
-                    # rewards.SmoothingComponent(
-                    #     name="action_penalty",
-                    #     props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                    #     state_variables=self.state_variables,
-                    #     is_potential_based=True,
-                    #     list_length=10,
-                    #     cmp_scale=4.0,
-                    # ),
-                    # rewards.SmoothingComponent(
-                    #     name="altitude_contain",
-                    #     props=[prp.altitude_sl_ft],
-                    #     state_variables=self.state_variables,
-                    #     is_potential_based=True,
-                    #     list_length=20,
-                    #     cmp_scale=80000.0,
-                    # ),
-                )
-            elif stage_number == 2:
-                base_components = (
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_action",
-                        prop=prp.aileron_cmd,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck1",
-                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=2.0
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck2",
-                        func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=2.0
-                    ),
-                )
-                shaping_components = ()
-            elif stage_number == 3:
-                base_components = (
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_roll",
-                        prop=prp.roll_rad,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck1",
-                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=3.0
-                    ),
-                )
-                shaping_components = ()
-            elif stage_number == 4:
-                base_components = (
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_roll",
-                        prop=prp.roll_rad,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck1",
-                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=3.0
-                    ),
-                )
-                shaping_components = (
-                    rewards.SmoothingComponent(
-                        name="action_penalty",
-                        props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                        state_variables=self.state_variables,
-                        is_potential_based=True,
-                        list_length=10,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.SmoothingComponent(
-                        name="altitude_contain",
-                        props=[prp.altitude_sl_ft],
-                        state_variables=self.state_variables,
-                        is_potential_based=True,
-                        list_length=20,
-                        cmp_scale=20000.0,
-                    ),
-                )
-            elif stage_number == 5:
-                base_components = (
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_action",
-                        prop=prp.aileron_cmd,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_thrust",
-                        prop=prp.throttle_cmd,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.4,
-                        scaling_factor=0.1,
-                        cmp_scale=8.0,
-                    ),
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="small_roll",
-                        prop=prp.roll_rad,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=0.0,
-                        scaling_factor=0.5,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.UserDefinedComponent(
-                        name="deck1",
-                        func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
-                        props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
-                        cmp_scale=3.0
-                    ),
-                )
-                shaping_components = (
-                    rewards.SmoothingComponent(
-                        name="action_penalty",
-                        props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                        state_variables=self.state_variables,
-                        is_potential_based=True,
-                        list_length=10,
-                        cmp_scale=4.0,
-                    ),
-                    rewards.SmoothingComponent(
-                        name="altitude_contain",
-                        props=[prp.altitude_sl_ft],
-                        state_variables=self.state_variables,
-                        is_potential_based=True,
-                        list_length=20,
-                        cmp_scale=20000.0,
-                    ),
-                )
-            if not base_components and not shaping_components:
-                raise ValueError(f"Reward function of {shaping_type} is not defined")
-        else:
-            raise ValueError(f"Unsupported shaping type: {shaping_type} , you should use 'stage*' as shaping type")
-        
-        return assessors.AssessorImpl(
-            base_components,
-            shaping_components,
-            positive_rewards=self.positive_rewards,
-        )
-    
-    def _is_hp_zero(self, sim: Simulation, opponent_sim: Simulation) -> bool:
-        return False  # 在TrackingInitTask中不考虑HP为0的情况
-    
-    def _reward_terminal_override(
-        self, reward: rewards.Reward, sim: Simulation, opponent_sim: Simulation
-    ) -> rewards.Reward:
-        # if sim[self.aircraft_HP] <= 1:
-        #     add_reward -= sim[self.steps_left] #/ self.steps_left.max
-        add_reward = 0
-        reward.set_additional_reward(add_reward)
-        # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
-        return reward
 

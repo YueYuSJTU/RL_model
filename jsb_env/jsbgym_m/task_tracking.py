@@ -342,13 +342,14 @@ class TrackingTask(FlightTask):
             "info/steps_left", "steps remaining in episode", 0, episode_steps
         )
         self.aircraft = aircraft
-        self.state_variables = (
-            FlightTask.base_state_variables
-            + self.tracking_state_variables
-            + self.extra_state_variables
-            + self.oppo_state_variables
-            + self.action_variables
-        )
+        if not hasattr(self, 'state_variables'):
+            self.state_variables = (
+                FlightTask.base_state_variables
+                + self.tracking_state_variables
+                + self.extra_state_variables
+                + self.oppo_state_variables
+                + self.action_variables
+            )
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')

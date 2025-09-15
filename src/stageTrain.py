@@ -54,7 +54,7 @@ def find_latest_training_result(stage_path):
 
 def train(stage_path: str = ""):
     # 加载配置
-    with open("configs/stage_train_config.yaml", encoding="utf-8") as f:
+    with open("configs/goal_point_config.yaml", encoding="utf-8") as f:
         stage_train_cfg = yaml.safe_load(f)
     if not stage_path:
         if 'stage1' not in stage_train_cfg.keys():
@@ -83,8 +83,12 @@ def train(stage_path: str = ""):
         save_config(env_cfg, log_path, "env_config.yaml")
 
         # 创建环境
-        train_env = create_env(env_cfg, training=True, num_cpu=train_cfg["num_cpu"])
-        eval_env = create_env(env_cfg, training=False)
+        if train_cfg.get("model_num") is not None:
+            vec_env_kwargs={"model_num": train_cfg["model_num"]}
+        else:
+            vec_env_kwargs=None
+        train_env = create_env(env_cfg, training=True, num_cpu=train_cfg["num_cpu"], vec_env_kwargs=vec_env_kwargs)
+        eval_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
         eval_env.training = False
         eval_env.norm_reward = False
 

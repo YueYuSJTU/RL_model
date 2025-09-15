@@ -1,0 +1,27 @@
+# 环境配置
+plane: "F16"
+task: "GoalPointTask"
+shape: "stage1"  # 任务阶段1
+render_mode: null  # 训练时关闭渲染
+use_vec_normalize: True
+norm_obs: True
+norm_reward: True
+clip_obs: 10.0
+
+# wrappers:
+#   - name: "src.environments.ContinueWrapper:ContinueObservation"
+#     kwargs:
+#       skip_frame: 2
+#       total_frame: 10
+  
+  # - name: "gymnasium.wrappers:TimeLimit"
+  #   kwargs:
+  #     max_episode_steps: 500
+      
+  # - name: "src.my_wrappers:AnotherCustomWrapper"
+  #   kwargs:
+  #     some_param: "value1"
+  #     another_param: 123
+      
+  # - name: "stable_baselines3.common.atari_wrappers.AtariWrapper"
+  #   kwargs: {} # 这个 wrapper 不需要额外参数
