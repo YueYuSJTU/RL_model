@@ -64,4 +64,4 @@ if __name__ == "__main__":
     parser.add_argument("--random_input", type=bool, default=False)
     parser.add_argument("--model_num", type=int, default=0, help="Model number for multi-agent environments")
     args = parser.parse_args()
-    show(args.exp_path, args.render_mode, args.random_input)
+    show(args.exp_path, args.render_mode, args.random_input, model_num=args.model_num)

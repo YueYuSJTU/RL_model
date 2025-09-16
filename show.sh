@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 # 使用source方式初始化conda并激活环境
 source $(conda info --base)/etc/profile.d/conda.sh
-conda activate js
+conda activate js_gpu
 
 # 检查 experiments 目录是否存在
 if [ ! -d "./experiments" ]; then
@@ -32,6 +32,37 @@ fi
 
 selected_exp="${experiments[$exp_idx]}"
 selected_exp_name=$(basename "$selected_exp")
+
+is_goal_point_mode=0
+if [ "$selected_exp_name" == "goal_point" ]; then
+    is_goal_point_mode=1
+    echo "选择了展示GoalPoint模型"
+    
+    # 列出 goal_point 文件夹中的实验
+    echo "可用的GoalPoint实验："
+    experiments=($(ls -d "$selected_exp"/*/))
+    if [ ${#experiments[@]} -eq 0 ]; then
+        echo "错误：goal_point文件夹中没有实验"
+        exit 1
+    fi
+    
+    for i in "${!experiments[@]}"; do
+        folder_name=$(basename "${experiments[$i]}")
+        echo "[$i] $folder_name"
+    done
+
+    # 再次询问用户选择哪个实验
+    read -p "请选择要评估的实验 [0-$((${#experiments[@]}-1))]: " exp_idx
+
+    # 验证输入
+    if ! [[ "$exp_idx" =~ ^[0-9]+$ ]] || [ "$exp_idx" -ge "${#experiments[@]}" ]; then
+        echo "错误：无效的选择"
+        exit 1
+    fi
+
+    selected_exp="${experiments[$exp_idx]}"
+    selected_exp_name=$(basename "$selected_exp")
+fi
 
 echo "已选择实验: $selected_exp_name"
 echo ""
@@ -176,17 +207,22 @@ esac
 echo "已选择渲染模式: $render_mode"
 echo ""
 
-# 添加选择对手模型类型
-echo "选择对手模型类型:"
-echo "[-1] 随机输入"
-echo "[0] 随机对手"
-echo "[1+] 对手池中对应编号的对手"
-read -p "请选择对手模型类型: " opponent_model_type
+if [ "$is_goal_point_mode" -eq 1 ]; then
+    opponent_model_type=-1
+    echo "GoalPoint模式下，对手模型类型固定为随机输入"
+else
+    # 添加选择对手模型类型
+    echo "选择对手模型类型:"
+    echo "[-1] 随机输入"
+    echo "[0] 随机对手"
+    echo "[1+] 对手池中对应编号的对手"
+    read -p "请选择对手模型类型: " opponent_model_type
 
-# 验证输入
-if ! [[ "$opponent_model_type" =~ ^-?[0-9]+$ ]]; then
-    echo "错误：无效的选择"
-    exit 1
+    # 验证输入
+    if ! [[ "$opponent_model_type" =~ ^-?[0-9]+$ ]]; then
+        echo "错误：无效的选择"
+        exit 1
+    fi
 fi
 
 # 设置脚本参数
