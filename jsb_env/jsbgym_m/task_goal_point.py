@@ -114,7 +114,7 @@ class GoalPointTask(TrackingTask):
                         state_variables=self.state_variables,
                         is_potential_based=False,
                         target=0.0,
-                        scaling_factor=-1.0 / 1000.0,  # Negative for reward
+                        scaling_factor=2000,  # Negative for reward
                         cmp_scale=2.0,
                     ),
                     rewards.ScaledAsymptoticErrorComponent(
@@ -126,24 +126,24 @@ class GoalPointTask(TrackingTask):
                         scaling_factor=0.2,
                         cmp_scale=1.0,
                     ),
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="altitude_error",
-                        prop=prp.altitude_sl_ft,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=5000.0,  # target altitude
-                        scaling_factor=1.0 / 2000.0,
-                        cmp_scale=1.0,
-                    ),
-                    rewards.ScaledAsymptoticErrorComponent(
-                        name="velocity_error",
-                        prop=prp.vtrue_fps,
-                        state_variables=self.state_variables,
-                        is_potential_based=False,
-                        target=self.aircraft.get_cruise_speed_fps(),
-                        scaling_factor=1.0 / 100.0,
-                        cmp_scale=1.0,
-                    ),
+                    # rewards.ScaledAsymptoticErrorComponent(
+                    #     name="altitude_error",
+                    #     prop=prp.altitude_sl_ft,
+                    #     state_variables=self.state_variables,
+                    #     is_potential_based=False,
+                    #     target=5000.0,  # target altitude
+                    #     scaling_factor=1.0 / 2000.0,
+                    #     cmp_scale=1.0,
+                    # ),
+                    # rewards.ScaledAsymptoticErrorComponent(
+                    #     name="velocity_error",
+                    #     prop=prp.vtrue_fps,
+                    #     state_variables=self.state_variables,
+                    #     is_potential_based=False,
+                    #     target=self.aircraft.get_cruise_speed_fps(),
+                    #     scaling_factor=1.0 / 100.0,
+                    #     cmp_scale=1.0,
+                    # ),
                 )
                 shaping_components = (
                     rewards.SmoothingComponent(
@@ -351,9 +351,9 @@ class GoalPointTask(TrackingTask):
                 opponent_sim[prp.altitude_sl_ft]
             ])
             opponent_position = self.update_goal_point()
-            opponent_sim[self.ned_Xposition_ft] = opponent_position[0]
-            opponent_sim[self.ned_Yposition_ft] = opponent_position[1]
-            opponent_sim[prp.altitude_sl_ft] = opponent_position[2]
+            sim[self.oppo_x_ft] = opponent_sim[self.ned_Xposition_ft] = opponent_position[0]
+            sim[self.oppo_y_ft] = opponent_sim[self.ned_Yposition_ft] = opponent_position[1]
+            sim[self.oppo_altitude_sl_ft] = opponent_sim[prp.altitude_sl_ft] = opponent_position[2]
     
     # def get_position(self, sim: Simulation) -> Tuple[float, float, float]:
     #     """
@@ -591,17 +591,17 @@ class GoalPointTask(TrackingTask):
                 raise ValueError("Opponent_sim is None. You should give it when restart a new episode.")
             # super()._new_episode_init(opponent_sim) # We manually init opponent_sim above
 
-    # def get_props_to_output(self) -> Tuple:
-    #     return (
-    #         prp.u_fps,
-    #         prp.altitude_sl_ft,
-    #         self.distance_oppo_ft,
-    #         self.track_angle_rad,
-    #         self.adverse_angle_rad,
-    #         self.closure_rate,
-    #         # self.opponent_HP,
-    #         self.steps_left,
-    #     )
+    def get_props_to_output(self) -> Tuple:
+        return (
+            prp.u_fps,
+            prp.altitude_sl_ft,
+            self.distance_oppo_ft,
+            self.track_angle_rad,
+            # self.adverse_angle_rad,
+            self.closure_rate,
+            # self.opponent_HP,
+            self.steps_left,
+        )
 
 
 def logistic(x, alpha, x0):

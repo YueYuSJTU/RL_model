@@ -183,19 +183,23 @@ echo ""
 # 询问用户使用什么渲染模式
 echo "可用的渲染模式:"
 echo "[0] human"
-echo "[1] flightgear"
-echo "[2] none"
+echo "[1] anim3d"
+echo "[2] flightgear"
+echo "[3] none"
 
-read -p "请选择渲染模式 [0-2]: " mode_idx
+read -p "请选择渲染模式 [0-3]: " mode_idx
 
 case $mode_idx in
     0)
         render_mode="human"
         ;;
     1)
-        render_mode="flightgear"
+        render_mode="anim3d"
         ;;
     2)
+        render_mode="flightgear"
+        ;;
+    3)
         render_mode="none"
         ;;
     *)

@@ -26,7 +26,7 @@ class JsbSimEnv(gym.Env):
 
     JSBSIM_DT_HZ: int = 60  # JSBSim integration frequency
     metadata = {
-        "render_modes": ["human", "flightgear", "human_fg", "graph", "graph_fg"],
+        "render_modes": ["human", "flightgear", "human_fg", "graph", "graph_fg", "anim3d"],
         "render_fps": 60,
     }
 
@@ -258,7 +258,7 @@ class NoFGJsbSimEnv(JsbSimEnv):
 
     JSBSIM_DT_HZ: int = 60  # JSBSim integration frequency
     metadata = {
-        "render_modes": ["human", "graph"],
+        "render_modes": ["human", "graph", "anim3d"],
         "render_fps": 60,
     }
 
@@ -382,31 +382,31 @@ class DoubleJsbSimEnv(JsbSimEnv):
         )
         observation = np.array(state)
 
-        # # save reward components from info
-        # if self.render_mode == "human":
-        #     if hasattr(self.task, "opponent"):
-        #         x, y, z, oppoX, oppoY, oppoZ = self.task.get_position(self.sim)
-        #         self.figure_visualiser.save_target(oppoX, oppoY, oppoZ)
-        #     else:
-        #         x, y, z = self.task.get_position(self.sim)
-        #     self.figure_visualiser.save_position(x, y, z)
-        #     self.figure_visualiser.save_reward_components(info["reward"])
+        # save reward components from info
+        if self.render_mode == "human":
+            if hasattr(self.task, "opponent"):
+                x, y, z, oppoX, oppoY, oppoZ = self.task.get_position(self.sim)
+                self.figure_visualiser.save_target(oppoX, oppoY, oppoZ)
+            else:
+                x, y, z = self.task.get_position(self.sim)
+            self.figure_visualiser.save_position(x, y, z)
+            self.figure_visualiser.save_reward_components(info["reward"])
 
-        # # plot trajectory
-        # if self.render_mode == "human" and terminated:
-        #     self.render()
-        #     if hasattr(self.task, "target_Xposition"):
-        #         target = [self.task._get_target_position("x"), 
-        #                   self.task._get_target_position("y"),
-        #                   self.task._get_target_position("z")]
-        #         self.figure_visualiser.plot_position(target)
-        #         self.figure_visualiser.plot_reward_components()
-        #     elif hasattr(self.task, "opponent"):
-        #         self.figure_visualiser.plot_position("tracking")
-        #         self.figure_visualiser.plot_reward_components()
-        #     else:
-        #         self.figure_visualiser.plot_position()
-        #         self.figure_visualiser.plot_reward_components()
+        # plot trajectory
+        if self.render_mode == "human" and terminated:
+            self.render()
+            if hasattr(self.task, "target_Xposition"):
+                target = [self.task._get_target_position("x"), 
+                          self.task._get_target_position("y"),
+                          self.task._get_target_position("z")]
+                self.figure_visualiser.plot_position(target)
+                self.figure_visualiser.plot_reward_components()
+            elif hasattr(self.task, "opponent"):
+                self.figure_visualiser.plot_position("tracking")
+                self.figure_visualiser.plot_reward_components()
+            else:
+                self.figure_visualiser.plot_position()
+                self.figure_visualiser.plot_reward_components()
 
         return observation, reward, terminated, False, info
 
@@ -421,6 +421,12 @@ class DoubleJsbSimEnv(JsbSimEnv):
             return
 
         if self.render_mode == "human":
+            if not self.figure_visualiser:
+                self.figure_visualiser = FigureVisualiser(
+                    self.sim, self.task.get_props_to_output()
+                )
+            self.figure_visualiser.plot(self.sim)
+        elif self.render_mode == "anim3d":
             if not self.figure_visualiser:
                 # self.figure_visualiser = FigureVisualiser(
                 #     self.sim, self.task.get_props_to_output()
@@ -453,7 +459,7 @@ class NoFGDoubleJsbSimEnv(DoubleJsbSimEnv):
 
     JSBSIM_DT_HZ: int = 60  # JSBSim integration frequency
     metadata = {
-        "render_modes": ["human", "graph"],
+        "render_modes": ["human", "graph", "anim3d"],
         "render_fps": 60,
     }
     def _init_new_sim(self, dt: float, aircraft: Aircraft, initial_conditions: Dict, output_file: str=None):
