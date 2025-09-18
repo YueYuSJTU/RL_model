@@ -180,33 +180,38 @@ selected_result_name=$(basename "$selected_result")
 echo "已选择训练结果: $selected_result_name"
 echo ""
 
-# 询问用户使用什么渲染模式
-echo "可用的渲染模式:"
-echo "[0] human"
-echo "[1] anim3d"
-echo "[2] flightgear"
-echo "[3] none"
+if [ "$is_goal_point_mode" -eq 1 ]; then
+    render_mode="human"
+    echo "GoalPoint模式下，渲染模式固定为human"
+else
+    # 询问用户使用什么渲染模式
+    echo "可用的渲染模式:"
+    echo "[0] human"
+    echo "[1] anim3d"
+    echo "[2] flightgear"
+    echo "[3] none"
 
-read -p "请选择渲染模式 [0-3]: " mode_idx
+    read -p "请选择渲染模式 [0-3]: " mode_idx
 
-case $mode_idx in
-    0)
-        render_mode="human"
-        ;;
-    1)
-        render_mode="anim3d"
-        ;;
-    2)
-        render_mode="flightgear"
-        ;;
-    3)
-        render_mode="none"
-        ;;
-    *)
-        echo "错误：无效的选择"
-        exit 1
-        ;;
-esac
+    case $mode_idx in
+        0)
+            render_mode="human"
+            ;;
+        1)
+            render_mode="anim3d"
+            ;;
+        2)
+            render_mode="flightgear"
+            ;;
+        3)
+            render_mode="none"
+            ;;
+        *)
+            echo "错误：无效的选择"
+            exit 1
+            ;;
+    esac
+fi
 
 echo "已选择渲染模式: $render_mode"
 echo ""
