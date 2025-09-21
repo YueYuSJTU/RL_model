@@ -1,38 +1,39 @@
 import os
 import yaml
 import shutil
-from utils.yaml_import import add_path
+import argparse
+from src.utils.yaml_import import add_path
 add_path()
 from datetime import datetime
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback, ProgressBarCallback
 from stable_baselines3.common.utils import set_random_seed
-from environments.make_env import create_env
-from utils.logger import setup_logger
-from utils.serialization import save_config
-from agents.make_agent import creat_agent, load_agent
-from evaluate import evaluate
+from src.environments.make_env import create_env
+from src.utils.logger import setup_logger
+from src.utils.serialization import save_config
+from src.agents.make_agent import creat_agent, load_agent
+from src.evaluate import evaluate
 
-def find_latest_training_result(stage_path):
+def find_latest_training_result(pretrained_path):
     """
-    查找stage_path下最新的训练结果路径
+    查找pretrained_path下最新的训练结果路径
     
     Args:
-        stage_path: 包含所有stage的根目录
+        pretrained_path: 包含所有stage的根目录
         
     Returns:
         latest_result_path: 最新训练结果的路径
     """
     # 查找所有stage文件夹
-    stage_dirs = [d for d in os.listdir(stage_path) 
-                 if os.path.isdir(os.path.join(stage_path, d)) and "stage" in d]
+    stage_dirs = [d for d in os.listdir(pretrained_path) 
+                 if os.path.isdir(os.path.join(pretrained_path, d)) and "stage" in d]
     
     if not stage_dirs:
-        raise ValueError(f"在 {stage_path} 中没有找到stage文件夹")
+        raise ValueError(f"在 {pretrained_path} 中没有找到stage文件夹")
     
     # 找到最新的stage（按修改时间排序）
     latest_stage = max(
-        [os.path.join(stage_path, d) for d in stage_dirs],
+        [os.path.join(pretrained_path, d) for d in stage_dirs],
         key=os.path.getmtime
     )
     
@@ -52,16 +53,21 @@ def find_latest_training_result(stage_path):
     
     return latest_result
 
-def train(stage_path: str = ""):
+def train(pretrained_path: str = "", config_path: str = "", eval_pool_path: str = ""):
     # 加载配置
-    with open("configs/goal_point_config.yaml", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         stage_train_cfg = yaml.safe_load(f)
-    if not stage_path:
+    if not pretrained_path:
+        # 从头开始训练必须提供stage1
         if 'stage1' not in stage_train_cfg.keys():
             raise ValueError("You don't give stage path, so you must start a new train with stage1.")
         home_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        stage_path = os.path.join(next(iter(stage_train_cfg.values()))["log_root"], home_timestamp)
-    for train_cfg in stage_train_cfg.values():
+        train_path = os.path.join(next(iter(stage_train_cfg.values()))["log_root"], home_timestamp)
+    else:
+        # 微调模式，目前只支持单阶段微调
+        assert len(stage_train_cfg) == 1, "Only one stage is supported in fine-tuning mode."
+    for stage_key, train_cfg in stage_train_cfg.items():
+        stage_num = int(stage_key[5:])
         env_path = os.path.join("configs", "env", f"{train_cfg['env']}.yaml")
         agent_path = os.path.join("configs", "agent", f"{train_cfg['agent']}.yaml")
         with open(agent_path, encoding="utf-8") as f:
@@ -72,7 +78,15 @@ def train(stage_path: str = ""):
         # 设置实验路径
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         exp_name = f"{timestamp}_{env_cfg['task']}_{train_cfg['agent']}"
-        log_path = os.path.join(stage_path, f"stage{train_cfg['stage_num']}", exp_name)
+        if not pretrained_path:
+            log_path = os.path.join(train_path, f"stage{stage_num}", exp_name)
+        else:
+            stage_dirs = [d for d in os.listdir(pretrained_path) if os.path.isdir(os.path.join(pretrained_path, d)) and "stage" in d]
+            if not stage_dirs:
+                raise ValueError(f"在 {pretrained_path} 中没有找到stage文件夹")
+            latest_stage_dir = max([os.path.join(pretrained_path, d) for d in stage_dirs], key=os.path.getmtime)
+            log_path = os.path.join(latest_stage_dir, exp_name)
+            print(f"Fine-tuning from {latest_stage_dir}, results will be saved to {log_path}")
         
         # 初始化日志系统
         logger = setup_logger(log_path)
@@ -104,15 +118,26 @@ def train(stage_path: str = ""):
         progress_callback = ProgressBarCallback()
 
         # 创建或加载模型
-        if train_cfg['stage_num'] == 1:
-            model = creat_agent(
-                env=train_env,
-                agent_class=train_cfg["agent"],
-                tensorboard_log=os.path.join(train_cfg["log_root"], home_timestamp, "tensorboard", timestamp),
-                agent_cfg=agent_cfg
-            )
+        if stage_num == 1:
+            if not pretrained_path:
+                # 预训练模式第一阶段，创建模型
+                model = creat_agent(
+                    env=train_env,
+                    agent_class=train_cfg["agent"],
+                    tensorboard_log=os.path.join(train_cfg["log_root"], home_timestamp, "tensorboard", timestamp),
+                    agent_cfg=agent_cfg
+                )
+            else:
+                # 微调模式，加载最新stage的模型
+                model = load_agent(
+                    env=train_env,
+                    agent_class=train_cfg["agent"],
+                    path=os.path.join(latest_stage_dir, "best_model"),
+                    device=agent_cfg["device"]
+                )
         else:
-            load_path = os.path.join(stage_path, f"stage{train_cfg['stage_num'] - 1}")
+            # 预训练模式的非第一阶段，加载上一个阶段的最佳模型
+            load_path = os.path.join(train_path, f"stage{stage_num - 1}")
             model = load_agent(
                 env=train_env,
                 agent_class=train_cfg["agent"],
@@ -136,8 +161,15 @@ def train(stage_path: str = ""):
             shutil.copy(best_model_path, os.path.join(log_path, ".."))
 
     # 在训练结束后查找最新的训练结果并进行评估
-    latest_result = find_latest_training_result(stage_path)
-    evaluate(latest_result, "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3", n_episodes=1000)
+    eval_path = pretrained_path if pretrained_path else train_path
+    latest_result = find_latest_training_result(eval_path)
+    evaluate(latest_result, eval_pool_path, n_episodes=1000)
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Train a reinforcement learning model.")
+    parser.add_argument("--config", type=str, required=True, default="configs/goal_point_config.yaml", help="Path to the configuration file.")
+    parser.add_argument("--eval_pool", type=str, required=True, default="/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3", help="Path to the evaluation pool.")
+    parser.add_argument("--pretrained_path", type=str, default="", help="Path to the stage directory (optional).")
+    args = parser.parse_args()
+
+    train(pretrained_path=args.pretrained_path, config_path=args.config, eval_pool_path=args.eval_pool)

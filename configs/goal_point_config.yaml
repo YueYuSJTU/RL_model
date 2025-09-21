@@ -1,6 +1,5 @@
 # 阶段训练通用配置
 stage1:
-  stage_num: 1
   agent: ppo_1layer
   env: f16_goal_point
   total_timesteps: 40_000_000

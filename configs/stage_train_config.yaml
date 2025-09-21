@@ -1,6 +1,5 @@
 # 阶段训练通用配置
 stage1:
-  stage_num: 1
   agent: ppo_1layer
   env: f16_tracking_stage1
   total_timesteps: 300_000
@@ -11,7 +10,6 @@ stage1:
 
 
 stage2:
-  stage_num: 2
   agent: ppo_1layer
   env: f16_tracking_stage2
   total_timesteps: 200000_000
