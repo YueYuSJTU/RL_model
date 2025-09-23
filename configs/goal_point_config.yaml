@@ -2,7 +2,7 @@
 stage1:
   agent: ppo_1layer
   env: f16_goal_point
-  total_timesteps: 40_000_000
+  total_timesteps: 10_000_000
   eval_freq: 10000
   log_root: "./experiments/goal_point"
   seed: 42

@@ -43,7 +43,7 @@ class GoalPointTask(TrackingTask):
         aircraft: Aircraft,
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
-        goal_point_mode: str = 'random'  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
+        goal_point_mode: str = 'spiral'  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
     ):
         """
         Constructor.
@@ -119,8 +119,8 @@ class GoalPointTask(TrackingTask):
                         state_variables=self.state_variables,
                         is_potential_based=False,
                         target=0.0,
-                        scaling_factor=2000,  # Negative for reward
-                        cmp_scale=2.0,
+                        scaling_factor=2000,
+                        cmp_scale=4.0,
                     ),
                     rewards.ScaledAsymptoticErrorComponent(
                         name="heading_error",
@@ -259,7 +259,7 @@ class GoalPointTask(TrackingTask):
             x = self.spiral_center[0] + self.spiral_radius * math.cos(self.spiral_angular_velocity * self.spiral_time)
             y = self.spiral_center[1] + self.spiral_radius * math.sin(self.spiral_angular_velocity * self.spiral_time)
             z = self.spiral_center[2] + self.spiral_vertical_speed * self.spiral_time
-            base_pos = np.concatenate((x, y, z))
+            base_pos = np.array([x, y, z])
             # Add perturbation to the position for erratic movement
             self.goal_point_position = self._add_velocity_perturbation(base_pos, magnitude=50.0)
         else:
@@ -274,7 +274,7 @@ class GoalPointTask(TrackingTask):
         base_oppo_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
-                    prp.initial_altitude_ft: 5000,
+                    prp.initial_altitude_ft: 5000.0,
                     prp.initial_terrain_altitude_ft: 0.00000001,
                     prp.initial_longitude_geoc_deg: -2.3273,
                     prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
@@ -291,7 +291,11 @@ class GoalPointTask(TrackingTask):
             prp.initial_roc_fpm: 0,
             prp.initial_heading_deg: 180,
         }
-        return {**base_oppo_initial_conditions, **extra_conditions}
+        goal_point_conditions = {
+            self.ned_Xposition_ft: 5000.0,  
+            self.ned_Yposition_ft: 0.0,
+        }
+        return {**base_oppo_initial_conditions, **extra_conditions, **goal_point_conditions}
 
     def _update_custom_properties(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         self._cal_self_position(sim, opponent_sim)
@@ -434,13 +438,11 @@ class GoalPointTask(TrackingTask):
         # Initialize goal point
         if opponent_sim is not None:
             # Set opponent sim's initial state so it can be used for storage
-            self.goal_point_position = self.coordinate_transform.ecef2ned(
-                opponent_sim[prp.ecef_x_ft],
-                opponent_sim[prp.ecef_y_ft],
-                opponent_sim[prp.ecef_z_ft]
-            )
-            opponent_sim[self.ned_Xposition_ft] = self.goal_point_position[0]
-            opponent_sim[self.ned_Yposition_ft] = self.goal_point_position[1]
+            self.goal_point_position = np.array([
+                opponent_sim[self.ned_Xposition_ft],
+                opponent_sim[self.ned_Yposition_ft],
+                opponent_sim[prp.altitude_sl_ft]
+            ])
             
             mode = self.current_goal_point_mode
             cruise_speed_fps = self.aircraft.get_cruise_speed_fps()
@@ -468,9 +470,9 @@ class GoalPointTask(TrackingTask):
                 # Adjust center so the spiral starts at goal_point_position
                 self.spiral_center[0] -= self.spiral_radius
                 # Randomize spiral parameters
-                self.spiral_radius = random.uniform(4000.0, 13000.0)
-                self.spiral_angular_velocity = random.uniform(0.015, 0.06) * random.choice([-1, 1])
-                self.spiral_vertical_speed = random.uniform(-100.0, 100.0)
+                self.spiral_radius = random.uniform(8000.0, 13000.0)
+                self.spiral_angular_velocity = random.uniform(0.01, 0.03) * random.choice([-1, 1])
+                self.spiral_vertical_speed = random.uniform(-10.0, 100.0)
 
             else:
                 raise ValueError(f"Unsupported goal point mode for initialization: {mode}")
