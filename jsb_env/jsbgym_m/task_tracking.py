@@ -141,7 +141,7 @@ class TrackingTask(FlightTask):
 
     # self aircraft state variables that derived from raw data
     distance_oppo_ft = BoundedProperty(
-        "target/distance-to-opponent", "distance to the opponent aircraft [ft]", 0, 50000
+        "target/distance-to-opponent", "distance to the opponent aircraft [ft]", 0, 500000
     )
     track_angle_rad = BoundedProperty(
         "target/track-angle", "track angle between the two aircraft [rad]", -math.pi, math.pi
@@ -161,14 +161,14 @@ class TrackingTask(FlightTask):
     ned_Xposition_ft = BoundedProperty(
         "position/positionX-ft",
         "current track [ft]",
-        -10000,
-        10000,
+        -100000,
+        100000,
     )
     ned_Yposition_ft = BoundedProperty(
         "position/positionY-ft",
         "current track [ft]",
-        -10000,
-        10000,
+        -100000,
+        100000,
     )
     # ned_Zposition_ft = BoundedProperty(
     #     "position/positionZ-ft",
@@ -180,15 +180,15 @@ class TrackingTask(FlightTask):
         "target/adverse-angle", "adverse angle between the two aircraft [rad]", -math.pi, math.pi
     )
     closure_rate = prp.BoundedProperty(
-        "target/closure-rate", "closure rate between the two aircraft [ft/s]", -10000, 10000
+        "target/closure-rate", "closure rate between the two aircraft [ft/s]", -100000, 100000
     )
 
     # opponent aircraft state variables
     oppo_x_ft = BoundedProperty(
-        "oppo/position/x-ft", "opponent aircraft x position [ft]", -10000, 10000
+        "oppo/position/x-ft", "opponent aircraft x position [ft]", -100000, 100000
     )
     oppo_y_ft = BoundedProperty(
-        "oppo/position/y-ft", "opponent aircraft y position [ft]", -10000, 10000
+        "oppo/position/y-ft", "opponent aircraft y position [ft]", -100000, 100000
     )
     oppo_altitude_sl_ft = BoundedProperty(
         "oppo/altitude-sl-ft", "altitude above mean sea level [ft]", -1400, 85000

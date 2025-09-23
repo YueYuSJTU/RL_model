@@ -43,7 +43,7 @@ class GoalPointTask(TrackingTask):
         aircraft: Aircraft,
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
-        goal_point_mode: str = 'spiral'  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
+        goal_point_mode: str = 'random'  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
     ):
         """
         Constructor.
@@ -266,15 +266,49 @@ class GoalPointTask(TrackingTask):
             raise ValueError(f"Unsupported goal point mode: {mode}")
 
         return self.goal_point_position
+    
+    def get_initial_conditions(self) -> Dict[Property, float]:
+        """
+        Get the initial conditions for the self aircraft.
+        """
+        # 初始化x和y的时候必须依靠NED坐标系，所以存成实例变量，在new_episode_init中调用
+        self.random_init_x = random.uniform(-8000.0, 8000.0)
+        self.random_init_y = random.uniform(-8000.0, 8000.0)
+        random_init_z = random.uniform(1500.0, 10000.0)
+        random_init_heading = random.uniform(0.0, 360.0)
+        base_initial_conditions = (
+            types.MappingProxyType(  # MappingProxyType makes dict immutable
+                {
+                    prp.initial_altitude_ft: random_init_z,
+                    prp.initial_terrain_altitude_ft: 0.00000001,
+                    prp.initial_longitude_geoc_deg: -2.3273,
+                    prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
+                }
+            )
+        )
+        extra_conditions = {
+            prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(),
+            prp.initial_v_fps: 0,
+            prp.initial_w_fps: 0,
+            prp.initial_p_radps: 0,
+            prp.initial_q_radps: 0,
+            prp.initial_r_radps: 0,
+            prp.initial_roc_fpm: 0,
+            prp.initial_heading_deg: random_init_heading,
+        }
+        return {**base_initial_conditions, **extra_conditions}
 
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
         Get the initial conditions for the opponent aircraft.
         """
+        random_init_x = random.uniform(-8000.0, 8000.0)
+        random_init_y = random.uniform(-8000.0, 8000.0)
+        random_init_z = random.uniform(1500.0, 10000.0)
         base_oppo_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
-                    prp.initial_altitude_ft: 5000.0,
+                    prp.initial_altitude_ft: random_init_z,
                     prp.initial_terrain_altitude_ft: 0.00000001,
                     prp.initial_longitude_geoc_deg: -2.3273,
                     prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
@@ -292,8 +326,8 @@ class GoalPointTask(TrackingTask):
             prp.initial_heading_deg: 180,
         }
         goal_point_conditions = {
-            self.ned_Xposition_ft: 5000.0,  
-            self.ned_Yposition_ft: 0.0,
+            self.ned_Xposition_ft: random_init_x,
+            self.ned_Yposition_ft: random_init_y,
         }
         return {**base_oppo_initial_conditions, **extra_conditions, **goal_point_conditions}
 
@@ -315,16 +349,15 @@ class GoalPointTask(TrackingTask):
         sim[self.ned_Xposition_ft] = self_position[0]
         sim[self.ned_Yposition_ft] = self_position[1]
 
-        if opponent_sim is not None:
-            self.goal_point_position = np.array([
-                opponent_sim[self.ned_Xposition_ft],
-                opponent_sim[self.ned_Yposition_ft],
-                opponent_sim[prp.altitude_sl_ft]
-            ])
-            opponent_position = self.update_goal_point()
-            sim[self.oppo_x_ft] = opponent_sim[self.ned_Xposition_ft] = opponent_position[0]
-            sim[self.oppo_y_ft] = opponent_sim[self.ned_Yposition_ft] = opponent_position[1]
-            sim[self.oppo_altitude_sl_ft] = opponent_sim[prp.altitude_sl_ft] = opponent_position[2]
+        self.goal_point_position = np.array([
+            opponent_sim[self.ned_Xposition_ft],
+            opponent_sim[self.ned_Yposition_ft],
+            opponent_sim[prp.altitude_sl_ft]
+        ])
+        opponent_position = self.update_goal_point()
+        sim[self.oppo_x_ft] = opponent_sim[self.ned_Xposition_ft] = opponent_position[0]
+        sim[self.oppo_y_ft] = opponent_sim[self.ned_Yposition_ft] = opponent_position[1]
+        sim[self.oppo_altitude_sl_ft] = opponent_sim[prp.altitude_sl_ft] = opponent_position[2]
         
     def _update_extra_properties(self, sim: Simulation, opponent_sim: Simulation) -> None:
         """
@@ -420,7 +453,7 @@ class GoalPointTask(TrackingTask):
     def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         super()._new_episode_init(sim, opponent_sim)
         sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
-        sim[self.steps_left] = self.steps_left.max
+        # sim[self.steps_left] = self.steps_left.max
         
         if self.goal_point_mode == 'random':
             modes = ['static', 'dynamic', 'random_dynamic', 'spiral']
@@ -432,8 +465,10 @@ class GoalPointTask(TrackingTask):
                                    sim[prp.ecef_y_ft], 
                                    sim[prp.ecef_z_ft]]
         lla_position = self.coordinate_transform.ecef2geo(*self.init_ecef_position)
+        # 主机坐标随机初始化等价于NED坐标系原点随机初始化
+        lla_position[0] += self.random_init_y * 0.3048 / 6378137.0 * (180.0 / math.pi)
+        lla_position[1] += self.random_init_x * 0.3048 / (6378137.0 * math.cos(lla_position[0] * math.pi / 180.0)) * (180.0 / math.pi)
         self.coordinate_transform.setNEDorigin(*lla_position)
-        sim[self.aircraft_HP] = self.HP
 
         # Initialize goal point
         if opponent_sim is not None:
