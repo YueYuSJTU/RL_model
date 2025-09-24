@@ -4,7 +4,7 @@
 
 这是一个基于 [JSBSim](http://jsbsim.sourceforge.net/) 的双飞机空战强化学习库。在 [jsbgym](https://github.com/Gor-Ren/jsbgym) (JSBSim的Gymnasium封装) 的基础上，扩展了新的任务：
 
--   **`goal_point` 任务**: 目标点跟随任务，主要用于初始化对手位置。
+-   **`goal_point` 任务**: 目标点跟随任务，主要用于初始化对手。
 -   **`tracking` 任务**: 双飞机1v1空战对抗环境。
 
 ---
@@ -59,12 +59,19 @@ python -m src.stageTrain \
 
 ## 3. 评估实验
 
+### 3.1 对战评估
+
 此脚本用于评估某个已训练模型的胜率，结果将以 `.txt` 和 `.npy` 格式存储。
 
 **运行方式:**
 
 ```bash
 ./evalate.sh
+```
+
+### 3.2 goal point模型评估
+```bash
+python ./test/evaluate_goal_point.py --n_episodes 1000 --exp_path "experiments/goal_point/20250922_095754/stage1/20250923_203916_GoalPointTask_ppo_1layer"
 ```
 
 ---

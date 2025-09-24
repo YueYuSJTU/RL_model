@@ -210,9 +210,12 @@ class GoalPointTask(TrackingTask):
             if sim[self.distance_oppo_ft] <= self.ARRIVE_RADIUS_FT:
                 # 成功到达目标点
                 win = 1
+            elif sim[self.aircraft_HP] <= 0:
+                # 坠机
+                win = -1
             else:
                 win = 0
-            env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
+            env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left], "mode": self.current_goal_point_mode}
         if self.debug:
             self._validate_state(state, terminated, truncated, self_action, reward)
         self._store_reward(reward, sim)
@@ -505,7 +508,7 @@ class GoalPointTask(TrackingTask):
                 # Adjust center so the spiral starts at goal_point_position
                 self.spiral_center[0] -= self.spiral_radius
                 # Randomize spiral parameters
-                self.spiral_radius = random.uniform(8000.0, 13000.0)
+                self.spiral_radius = random.uniform(5000.0, 9000.0)
                 self.spiral_angular_velocity = random.uniform(0.01, 0.03) * random.choice([-1, 1])
                 self.spiral_vertical_speed = random.uniform(-10.0, 100.0)
 
