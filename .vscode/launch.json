@@ -10,10 +10,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/show.py",
             "console": "integratedTerminal",
+            "justMyCode": false,
             "args": [
                 "--exp_path", 
-                // "experiments/20250616_221656/stage2/20250616_221824_TrackingTask_ppo_1layer1",
-                "experiments/goal_point/20250918_112529/stage1/20250918_112529_GoalPointTask_ppo_1layer",
+                "experiments/20250616_221656/stage2/20250616_221824_TrackingTask_ppo_1layer1",
+                // "experiments/goal_point/20250918_112529/stage1/20250918_112529_GoalPointTask_ppo_1layer",
                 "--render_mode", "human",
                 "--random_input", "False",
                 "--model_num", "0",

@@ -20,6 +20,7 @@ def create_env(
         env_config: dict, 
         num_cpu: int = 1, 
         training: bool = True,
+        vec_env_cls: Callable = NNVecEnv,
         vec_env_kwargs: Optional[dict[str, Any]] = None,
     ) -> DummyVecEnv:
     """创建标准化环境"""
@@ -42,7 +43,7 @@ def create_env(
             env_id, 
             n_envs=num_cpu, 
             wrapper_class=combined_wrapper_class,
-            vec_env_cls=NNVecEnv, 
+            vec_env_cls=vec_env_cls, 
             vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}
         )
@@ -53,7 +54,7 @@ def create_env(
             env_id, 
             n_envs=1, 
             wrapper_class=combined_wrapper_class,
-            vec_env_cls=NNVecEnv,
+            vec_env_cls=vec_env_cls,
             vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}
         )

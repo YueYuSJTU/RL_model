@@ -15,6 +15,7 @@ from stable_baselines3.common.vec_env.base_vec_env import (
     VecEnvObs,
     VecEnvStepReturn,
 )
+from ..agents.model_wrapper import ObsAdaptingModel
 
 class NNVecEnv(SubprocVecEnv):
     """
@@ -35,7 +36,7 @@ class NNVecEnv(SubprocVecEnv):
             self, 
             env_fns, 
             start_method=None, 
-            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3""",
+            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool4""",
             model_num: int = 0
         ):
         # 为了减半observation space和action space，必须复制父类init代码
@@ -74,12 +75,12 @@ class NNVecEnv(SubprocVecEnv):
         # 加载选择的敌机策略
         self.opponent_models = []
         # self.opponent_envs = []
-        self.opponent_env_config = []
         for root in self.opponent_model_roots:
             model = self._load_opponent_model(root)
-            self.opponent_models.append(model)
             env_config = self._load_opponent_env_config(root)
-            self.opponent_env_config.append(env_config)
+            # 使用ObsAdaptingModel包装模型
+            wrapped_model = ObsAdaptingModel(model, env_config)
+            self.opponent_models.append(wrapped_model)
             # self.opponent_envs.append(env)
         
         # 为每个子环境分配一个随机的初始策略
@@ -169,21 +170,32 @@ class NNVecEnv(SubprocVecEnv):
     def _load_opponent_model(self, model_path: str):
         """加载单个敌机策略模型"""
         import pickle
+        from src.environments.make_env import create_env
 
         model_file = os.path.join(model_path, "best_model.zip")
-        # env_file = os.path.join(model_path, "final_train_env.pkl")
+        env_config = self._load_opponent_env_config(model_path)
+        env_file = os.path.join(model_path, "final_train_env.pkl")
 
         if not os.path.exists(model_file):
             raise ValueError(f"Model file {model_file} does not exist.")
-        # if not os.path.exists(env_file):
-        #     raise ValueError(f"VecNormalize file {env_file} does not exist.")
-        
-        # 加载模型和标准化参数
-        model = PPO.load(model_file, device="cuda")
-        
+        if not os.path.exists(env_file):
+            raise ValueError(f"VecNormalize file {env_file} does not exist.")
+    
         # # 直接从pkl文件加载标准化参数
         # with open(env_file, "rb") as f:
         #     vec_env = pickle.load(f)
+
+        # 这里设置model_num为-1，避免循环依赖
+        vec_env = create_env(env_config, training=False, vec_env_kwargs={"model_num": -1})
+        vec_env = VecNormalize.load(
+            env_file, 
+            vec_env
+        )
+        vec_env.training = False
+        vec_env.norm_reward = False
+
+        # 加载模型和标准化参数
+        model = PPO.load(model_file, vec_env, device="cuda")
     
         return model
     
@@ -220,31 +232,14 @@ class NNVecEnv(SubprocVecEnv):
             if len(env_indices) == 0:
                 continue
                 
-            # 获取当前策略对应的模型和标准化环境
-            model = self.opponent_models[strategy_idx]
-            # vec_env = self.opponent_envs[strategy_idx]
+            # 获取当前策略对应的包装后模型
+            wrapped_model = self.opponent_models[strategy_idx]
             
             # 提取这些环境的观察值
             strategy_obs = obs[env_indices]
 
-            # 检查对手环境配置是否使用了ContinueObservation
-            has_continue_wrapper = False
-            if "wrappers" in self.opponent_env_config[strategy_idx]:
-                for wrapper in self.opponent_env_config[strategy_idx]["wrappers"]:
-                    if isinstance(wrapper, dict) and wrapper.get("name") == "src.environments.ContinueWrapper:ContinueObservation":
-                        has_continue_wrapper = True
-                        break
-            
-            # 如果对手环境不使用ContinueObservation但观察值是三维的(时间序列)，取最后一个时间步
-            if not has_continue_wrapper and len(strategy_obs.shape) == 3:
-                strategy_obs = strategy_obs[:, -1, :]  # 只取最新的观察值
-            
-            # 标准化观察值
-            # normalized_obs = vec_env.normalize_obs(strategy_obs)
-            
-            # 预测动作
-            with torch.no_grad():
-                strategy_actions, _ = model.predict(strategy_obs)
+            # 使用包装后的模型进行预测，包装器内部会处理观察适配
+            strategy_actions, _ = wrapped_model.predict(strategy_obs)
             
             # 将动作放回对应位置
             actions[env_indices] = strategy_actions
