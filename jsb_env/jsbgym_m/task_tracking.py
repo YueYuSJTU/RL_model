@@ -354,7 +354,7 @@ class TrackingTask(FlightTask):
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')
         # self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
-        self.opponent = self._create_opponent(model="jsbsim")
+        self.opponent = self._create_opponent(model="goal_point")
         # if self.opponent == "jsbsim":
         #     self.opponent_model, self.opponent_env = self._load_opponent_model()
         super().__init__(assessor)
@@ -367,6 +367,8 @@ class TrackingTask(FlightTask):
             return Opponent()
         elif model == "jsbsim":
             return "jsbsim"
+        elif model == "goal_point":
+            return "goal_point"
         else:
             raise ValueError("Unsupported opponent model: {}".format(model))
     
@@ -548,7 +550,7 @@ class TrackingTask(FlightTask):
         
         # print(f"self action: {self_action}, opponent action: {opponent_action}")
 
-        if self.opponent == "jsbsim":
+        if self.opponent == "jsbsim" or self.opponent == "goal_point":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. ")
             # opponent_action = self._get_opponent_action(opponent_sim)
@@ -561,7 +563,7 @@ class TrackingTask(FlightTask):
 
         # run simulation
         for _ in range(sim_steps):
-            if self.opponent == "jsbsim":
+            if self.opponent == "jsbsim" or self.opponent == "goal_point":
                 opponent_sim.run()
             sim.run()
 
@@ -657,6 +659,17 @@ class TrackingTask(FlightTask):
             prp.initial_heading_deg: 180,
         }
         return {**base_oppo_initial_conditions, **extra_conditions}
+    
+    def get_goal_point(self):
+        """
+        Get the goal point for the opponent aircraft when using "goal_point" mode.
+        """
+        goal_x = np.random.uniform(-10000, -8000) if random.random() < 0.5 else np.random.uniform(8000, 10000)
+        goal_y = np.random.uniform(-10000, -8000) if random.random() < 0.5 else np.random.uniform(8000, 10000)
+        goal_h = np.random.uniform(6000, 11000)
+        self.goal_point = prp.Vector3(goal_x, goal_y, goal_h)
+
+        return self.goal_point
 
 
     def get_initial_conditions(self) -> Dict[Property, float]:
@@ -737,15 +750,14 @@ class TrackingTask(FlightTask):
             sim[self.oppo_alpha_deg] = oppo_state["alpha_deg"]
             sim[self.oppo_beta_deg] = oppo_state["beta_deg"]
             sim[self.oppo_vtrue_fps] = oppo_state["vtrue_fps"]
-        elif self.opponent == "jsbsim":
+        elif self.opponent == "jsbsim" or self.opponent == "goal_point":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. You should give it when calculating opponent state.")
-            # opponent_position = self.coordinate_transform.ecef2ned(
-            #     opponent_sim[prp.ecef_x_ft],
-            #     opponent_sim[prp.ecef_y_ft],
-            #     opponent_sim[prp.ecef_z_ft]
-            # )
-            self._update_extra_properties(sim=opponent_sim, opponent_sim=sim)
+            
+            if self.opponent == "jsbsim":
+                self._update_extra_properties(sim=opponent_sim, opponent_sim=sim)
+            elif self.opponent == "goal_point":
+                self._update_extra_properties(sim=opponent_sim, opponent_sim=sim, set_oppo_position=self.goal_point)
             sim[self.oppo_x_ft] = opponent_sim[self.ned_Xposition_ft]
             sim[self.oppo_y_ft] = opponent_sim[self.ned_Yposition_ft]
             sim[self.oppo_altitude_sl_ft] = opponent_sim[prp.altitude_sl_ft]
@@ -792,7 +804,7 @@ class TrackingTask(FlightTask):
             raise ValueError("Unsupported opponent model: {}".format(self.opponent))
 
         
-    def _update_extra_properties(self, sim: Simulation, opponent_sim: Simulation) -> None:
+    def _update_extra_properties(self, sim: Simulation, opponent_sim: Simulation, set_oppo_position: prp.Vector3=None) -> None:
         """
         Update the extra properties.
         """
@@ -801,14 +813,17 @@ class TrackingTask(FlightTask):
             sim[self.ned_Yposition_ft],
             sim[prp.altitude_sl_ft]
         )
-        oppo_position = prp.Vector3(
-            # sim[self.oppo_x_ft],
-            # sim[self.oppo_y_ft],
-            # sim[self.oppo_altitude_sl_ft]
-            opponent_sim[self.ned_Xposition_ft],
-            opponent_sim[self.ned_Yposition_ft],
-            opponent_sim[prp.altitude_sl_ft]
-        )
+        if set_oppo_position is not None:
+            oppo_position = set_oppo_position
+        else:
+            oppo_position = prp.Vector3(
+                # sim[self.oppo_x_ft],
+                # sim[self.oppo_y_ft],
+                # sim[self.oppo_altitude_sl_ft]
+                opponent_sim[self.ned_Xposition_ft],
+                opponent_sim[self.ned_Yposition_ft],
+                opponent_sim[prp.altitude_sl_ft]
+            )
 
         if sim[self.steps_left] == self.steps_left.max:
             pre_distance = (own_position-oppo_position).Norm()
@@ -926,10 +941,11 @@ class TrackingTask(FlightTask):
         self.coordinate_transform.setNEDorigin(*lla_position)
         sim[self.aircraft_HP] = self.HP
         opponent_sim[self.aircraft_HP] = self.HP
+        self.goal_point = self.get_goal_point()
 
         if isinstance(self.opponent, Opponent):
             self.opponent.reset()
-        elif self.opponent == "jsbsim":
+        elif self.opponent == "jsbsim" or self.opponent == "goal_point":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. You should give it when restart a new episode.")
             super()._new_episode_init(opponent_sim)
