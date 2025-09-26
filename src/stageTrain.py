@@ -13,6 +13,7 @@ from src.utils.logger import setup_logger
 from src.utils.serialization import save_config
 from src.agents.make_agent import creat_agent, load_agent
 from src.evaluate import evaluate
+from src.utils.custom_callback import ComponentEvalCallback
 
 def find_latest_training_result(pretrained_path):
     """
@@ -107,7 +108,7 @@ def train(pretrained_path: str = "", config_path: str = "", eval_pool_path: str 
         eval_env.norm_reward = False
 
         # 初始化回调
-        eval_callback = EvalCallback(
+        eval_callback = ComponentEvalCallback(
             eval_env,
             best_model_save_path=log_path,
             log_path=log_path,
