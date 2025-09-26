@@ -43,7 +43,8 @@ class GoalPointTask(TrackingTask):
         aircraft: Aircraft,
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
-        goal_point_mode: str = 'random'  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
+        goal_point_mode: str = 'dynamic',  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
+        random_init: bool = False,
     ):
         """
         Constructor.
@@ -51,8 +52,9 @@ class GoalPointTask(TrackingTask):
         :param step_frequency_hz: the number of agent interaction steps per second
         :param aircraft: the aircraft used in the simulation
         :param goal_point_mode: The movement mode of the goal point.
+        :param random_init: whether to randomize initial conditions.
         """
-        
+        self.random_init = random_init
         self.extra_state_variables = (
             self.distance_oppo_ft,
             self.track_angle_rad,
@@ -275,10 +277,16 @@ class GoalPointTask(TrackingTask):
         Get the initial conditions for the self aircraft.
         """
         # 初始化x和y的时候必须依靠NED坐标系，所以存成实例变量，在new_episode_init中调用
-        self.random_init_x = random.uniform(-8000.0, 8000.0)
-        self.random_init_y = random.uniform(-8000.0, 8000.0)
-        random_init_z = random.uniform(1500.0, 10000.0)
-        random_init_heading = random.uniform(0.0, 360.0)
+        if self.random_init:
+            self.random_init_x = random.uniform(-8000.0, 8000.0)
+            self.random_init_y = random.uniform(-8000.0, 8000.0)
+            random_init_z = random.uniform(1500.0, 10000.0)
+            random_init_heading = random.uniform(0.0, 360.0)
+        else:
+            self.random_init_x = 0.0
+            self.random_init_y = 0.0
+            random_init_z = 5000.0
+            random_init_heading = 0.0
         base_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
@@ -305,9 +313,14 @@ class GoalPointTask(TrackingTask):
         """
         Get the initial conditions for the opponent aircraft.
         """
-        random_init_x = random.uniform(-8000.0, 8000.0)
-        random_init_y = random.uniform(-8000.0, 8000.0)
-        random_init_z = random.uniform(1500.0, 10000.0)
+        if self.random_init:
+            random_init_x = random.uniform(-8000.0, 8000.0)
+            random_init_y = random.uniform(-8000.0, 8000.0)
+            random_init_z = random.uniform(1500.0, 10000.0)
+        else:
+            random_init_x = 5000.0
+            random_init_y = 0.0
+            random_init_z = 5000.0
         base_oppo_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
