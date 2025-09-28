@@ -41,8 +41,9 @@ def evaluate_versus(model_path: str, pool_path: str, opponent_num: int, n_episod
         "model_num": opponent_num  # 对手模型编号
     }
     vec_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
+    env_pkl = "best_env.pkl" if os.path.exists(os.path.join(model_path, "best_env.pkl")) else "final_train_env.pkl"
     vec_env = VecNormalize.load(
-        os.path.join(model_path, "final_train_env.pkl"), 
+        os.path.join(model_path, env_pkl), 
         vec_env
     )
     vec_env.training = False

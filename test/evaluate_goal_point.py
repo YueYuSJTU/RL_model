@@ -34,8 +34,9 @@ def evaluate_goal_point(exp_path: str, n_episodes: int = 500) -> None:
     vec_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
     
     # 加载环境标准化器
+    env_pkl = "best_env.pkl" if os.path.exists(os.path.join(exp_path, "best_env.pkl")) else "final_train_env.pkl"
     vec_env = VecNormalize.load(
-        os.path.join(exp_path, "final_train_env.pkl"),
+        os.path.join(exp_path, env_pkl),
         vec_env
     )
     vec_env.training = False

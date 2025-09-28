@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 # 使用source方式初始化conda并激活环境
 source $(conda info --base)/etc/profile.d/conda.sh
-conda activate js
+conda activate js_gpu
 
 # 检查 experiments 目录是否存在
 if [ ! -d "./experiments" ]; then

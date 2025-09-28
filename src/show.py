@@ -20,8 +20,9 @@ def show(exp_path: str, render_mode: str = "human", random_input: bool = False, 
     
     # 创建评估环境
     vec_env = create_env(env_cfg, training=False, vec_env_kwargs={"model_num": model_num})
+    env_pkl = "best_env.pkl" if os.path.exists(os.path.join(exp_path, "best_env.pkl")) else "final_train_env.pkl"
     vec_env = VecNormalize.load(
-        os.path.join(exp_path, "final_train_env.pkl"), 
+        os.path.join(exp_path, env_pkl), 
         vec_env
     )
     vec_env.training = False

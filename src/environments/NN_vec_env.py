@@ -174,7 +174,7 @@ class NNVecEnv(SubprocVecEnv):
 
         model_file = os.path.join(model_path, "best_model.zip")
         env_config = self._load_opponent_env_config(model_path)
-        env_file = os.path.join(model_path, "final_train_env.pkl")
+        env_file = os.path.join(model_path, "best_env.pkl") if os.path.exists(os.path.join(model_path, "best_env.pkl")) else os.path.join(model_path, "final_train_env.pkl")
 
         if not os.path.exists(model_file):
             raise ValueError(f"Model file {model_file} does not exist.")

@@ -641,7 +641,7 @@ class TrackingTask(FlightTask):
         base_oppo_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
-                    prp.initial_altitude_ft: 5000,
+                    prp.initial_altitude_ft: 10000,
                     prp.initial_terrain_altitude_ft: 0.00000001,
                     prp.initial_longitude_geoc_deg: -2.3273,
                     prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
@@ -664,15 +664,25 @@ class TrackingTask(FlightTask):
         """
         Get the goal point for the opponent aircraft when using "goal_point" mode.
         """
-        goal_x = np.random.uniform(-10000, -8000) if random.random() < 0.5 else np.random.uniform(8000, 10000)
-        goal_y = np.random.uniform(-10000, -8000) if random.random() < 0.5 else np.random.uniform(8000, 10000)
-        goal_h = np.random.uniform(6000, 11000)
+        goal_x = np.random.uniform(-8000, -6000) if random.random() < 0.5 else np.random.uniform(6000, 8000)
+        goal_y = np.random.uniform(-8000, -6000) if random.random() < 0.5 else np.random.uniform(6000, 8000)
+        goal_h = np.random.uniform(8000, 20000)
         self.goal_point = prp.Vector3(goal_x, goal_y, goal_h)
 
         return self.goal_point
 
 
     def get_initial_conditions(self) -> Dict[Property, float]:
+        base_initial_conditions = (
+        types.MappingProxyType(  # MappingProxyType makes dict immutable
+            {
+                prp.initial_altitude_ft: 10000,
+                prp.initial_terrain_altitude_ft: 0.00000001,
+                prp.initial_longitude_geoc_deg: -2.3273,
+                prp.initial_latitude_geod_deg: 51.3781,  # corresponds to UoBath
+            }
+        )
+    )
         extra_conditions = {
             prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(),
             prp.initial_v_fps: 0,
@@ -683,7 +693,7 @@ class TrackingTask(FlightTask):
             prp.initial_roc_fpm: 0,
             prp.initial_heading_deg: self.INITIAL_HEADING_DEG,
         }
-        return {**self.base_initial_conditions, **extra_conditions}
+        return {**base_initial_conditions, **extra_conditions}
 
     def _update_custom_properties(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
         self._cal_self_position(sim, opponent_sim)

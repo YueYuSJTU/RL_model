@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 # 使用source方式初始化conda并激活环境
 source $(conda info --base)/etc/profile.d/conda.sh
-conda activate js
+conda activate js_gpu
 
 # 模型池的根目录
 POOL_ROOT="./opponent_pool"
