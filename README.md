@@ -47,6 +47,13 @@ python -m src.stageTrain \
 
 ---
 
+**battle 训练模式**
+```bash
+nohup python -m src.train.battle_train --config "configs/battle_train_config.yaml" --pool_path "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool4" >output.log 2>&1 &
+```
+
+---
+
 ## 2. 配置文件编写
 
 所有配置文件位于 `configs/` 文件夹下。

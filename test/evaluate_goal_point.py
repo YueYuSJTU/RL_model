@@ -13,13 +13,14 @@ from src.environments.make_env import create_env
 from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def evaluate_goal_point(exp_path: str, n_episodes: int = 500) -> None:
+def evaluate_goal_point(exp_path: str, n_episodes: int = 500, use_tqdm: bool = True) -> None:
     """
     评估模型在目标点任务中的表现。
 
     Args:
         exp_path: 实验路径，包含模型和环境配置。
         n_episodes: 蒙特卡洛模拟次数。
+        use_tqdm: 是否使用tqdm显示评估进度。
     """
     # 加载配置
     env_cfg = load_config(os.path.join(exp_path, "env_config.yaml"))
@@ -53,7 +54,12 @@ def evaluate_goal_point(exp_path: str, n_episodes: int = 500) -> None:
     results = defaultdict(lambda: {"success": 0, "crash": 0, "draw": 0, "total": 0})
 
     print(f"正在评估模型 {exp_path}...")
-    for _ in tqdm(range(n_episodes), desc="评估进度", ncols=80):
+    
+    episodes = range(n_episodes)
+    if use_tqdm:
+        episodes = tqdm(episodes, desc="评估进度", ncols=80)
+
+    for _ in episodes:
         obs = vec_env.reset()
         done = False
         while not done:

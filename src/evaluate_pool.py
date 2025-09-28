@@ -9,7 +9,7 @@ from src.environments.make_env import create_env
 from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def evaluate_versus(model_path: str, pool_path: str, opponent_num: int, n_episodes: int = 100) -> Tuple[float, float, float, float, float, float]:
+def evaluate_versus(model_path: str, pool_path: str, opponent_num: int, n_episodes: int = 100, use_tqdm=True) -> Tuple[float, float, float, float, float, float]:
     """
     评估模型与指定编号的对手模型之间的对战
     
@@ -65,7 +65,11 @@ def evaluate_versus(model_path: str, pool_path: str, opponent_num: int, n_episod
     total_rewards = []  # 用于存储每场对战的总奖励
     
     # 运行对战，使用tqdm显示进度条
-    for episode in tqdm(range(n_episodes), desc=f"对战对手{opponent_num}", ncols=80):
+    episodes = range(n_episodes)
+    if use_tqdm:
+        episodes = tqdm(range(n_episodes), desc=f"对战对手{opponent_num}", ncols=80)
+
+    for episode in episodes:
         obs = vec_env.reset()
         episode_done = False
         episode_reward = 0  # 初始化本场对战的奖励

@@ -43,8 +43,8 @@ class GoalPointTask(TrackingTask):
         aircraft: Aircraft,
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
-        goal_point_mode: str = 'dynamic',  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
-        random_init: bool = False,
+        goal_point_mode: str = 'random',  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
+        random_init: bool = True,
     ):
         """
         Constructor.

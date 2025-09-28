@@ -1,0 +1,23 @@
+# 阶段训练通用配置
+stage1:
+  agent: ppo_1layer
+  env: f16_tracking_stage1
+  total_timesteps: 300_000 # Train for a fixed number of steps
+  eval_freq: 25000
+  log_root: "./experiments"
+  seed: 42
+  num_cpu: 30
+
+stage2:
+  agent: ppo_1layer
+  env: f16_tracking_stage2
+  # No total_timesteps: this stage will run until you stop it with Ctrl+C
+  eval_freq: 50000
+  log_root: "./experiments"
+  seed: 42
+  num_cpu: 30
+  
+  # --- Battle Training Parameters (triggers battle mode for this last stage) ---
+  battle_step: 10_000_000      # Every battle_step, a new model challenges the pool.
+  max_pool_size: 8          # Max opponents in the pool.
+  n_episodes_eval: 1000      # Episodes per evaluation match.
