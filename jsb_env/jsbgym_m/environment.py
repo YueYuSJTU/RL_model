@@ -8,6 +8,7 @@ from jsbgym_m.enhanced_visualiser import Enhanced3DVisualiser, AnimatedEnhancedV
 from jsbgym_m.aircraft import Aircraft, c172, f16
 from typing import Optional, Type, Tuple, Dict
 import warnings
+import logging
 
 
 class JsbSimEnv(gym.Env):
@@ -316,6 +317,25 @@ class DoubleJsbSimEnv(JsbSimEnv):
                 init_conditions=initial_conditions, 
                 output_file=output_file,
             )
+        
+    def update_task_parameters(self, **kwargs):
+        """
+        一个通用的接口，用于更新内部task对象的参数。
+        这避免了为每个新参数都添加一个新方法的需要。
+
+        示例调用 (来自Callback):
+        env.update_task_parameters(goal_point_prob=0.5)
+        env.update_task_parameters(another_parameter=10.0, some_setting="new_value")
+        """
+        for key, value in kwargs.items():
+            # 检查task对象是否真的有这个属性，防止因拼写错误等问题引入bug
+            if hasattr(self.task, key):
+                setattr(self.task, key, value)
+            else:
+                # 打印一个警告，以便于调试
+                logging.warning(
+                    f"在 MyAirCombatEnv 中：尝试更新一个不存在的 task 参数 '{key}'。"
+                )
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         oppo_init_conditions = self.task.get_opponent_initial_conditions()

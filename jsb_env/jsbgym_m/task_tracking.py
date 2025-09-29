@@ -353,24 +353,22 @@ class TrackingTask(FlightTask):
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')
-        # self.opponent_model_root = "/home/ubuntu/Workfile/RL/jsbgym/jsbgym_m/agents/opponent_model"
-        self.opponent = self._create_opponent(model="goal_point")
-        # if self.opponent == "jsbsim":
-        #     self.opponent_model, self.opponent_env = self._load_opponent_model()
+        # 控制对手模式为"goal_point"还是"jsbsim"的概率,此数值的调整在train程序中用callback实现
+        self.goal_point_prob = 1.0
+
         super().__init__(assessor)
     
-    def _create_opponent(self, model: str = "trival") -> Opponent:
+    def _create_opponent(self) -> Opponent:
         """
         Create the opponent aircraft.
         """
-        if model == "trival":
-            return Opponent()
-        elif model == "jsbsim":
-            return "jsbsim"
-        elif model == "goal_point":
-            return "goal_point"
+        if np.random.rand() < self.goal_point_prob:
+            # 简单的对手,其目标是飞向一个固定点
+            self.opponent = "goal_point"
         else:
-            raise ValueError("Unsupported opponent model: {}".format(model))
+            # 较困难的对手,其目标是追踪我方飞机
+            self.opponent = "jsbsim"
+
     
     def make_assessor(self, shaping_type: Shaping) -> assessors.AssessorImpl:
         """
@@ -944,6 +942,7 @@ class TrackingTask(FlightTask):
         sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
         sim[self.steps_left] = self.steps_left.max
         opponent_sim[self.steps_left] = self.steps_left.max
+        self._create_opponent()
         self.init_ecef_position = [sim[prp.ecef_x_ft], 
                                    sim[prp.ecef_y_ft], 
                                    sim[prp.ecef_z_ft]]

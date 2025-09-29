@@ -17,7 +17,7 @@ from src.environments.make_env import create_env
 from src.agents.make_agent import creat_agent, load_agent
 from src.utils.logger import setup_logger
 from src.utils.serialization import save_config, load_config
-from src.utils.custom_callback import ComponentEvalCallback
+from src.utils.custom_callback import ComponentEvalCallback, EpisodeCurriculumCallback
 from src.train.pool_manager import PoolManager # Our PoolManager class
 
 # Setup root logger
@@ -177,6 +177,15 @@ class UnifiedTrainer:
             env=train_env, agent_class=stage_cfg['agent'],
             path=self.last_best_model_path, device=agent_cfg["device"]
         )
+
+        # --- 初始化在循环外持续存在的Callback ---
+        # 课程学习Callback的状态(is_active, num_timesteps)需要在整个战斗阶段中保持
+        logger.info("initializing curriculum learning callback for battle stage.")
+        curriculum_callback = EpisodeCurriculumCallback(
+            threshold_timesteps=stage_cfg['threshold_timesteps'],
+            update_freq_episodes=stage_cfg['update_freq_episodes'],
+            verbose=1
+        )
         
         # --- Main Battle Cycle ---
         total_timesteps = stage_cfg.get("total_timesteps", int(1e12))
@@ -194,20 +203,47 @@ class UnifiedTrainer:
 
                 logger.info(f"\n{'-'*20} BATTLE-TRAINING {cycle_info} {'-'*20}")
 
-                # 1. Train for one battle_step
-                self.model.learn(total_timesteps=battle_step, reset_num_timesteps=False)
-
-                # 2. Save the newly trained model to a temporary cycle directory
+                # 1. 为当前周期创建专属路径
                 cycle_dir_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_cycle_{completed_cycles}"
                 cycle_path = os.path.join(stage_path, cycle_dir_name)
                 os.makedirs(cycle_path)
+
+                save_config(stage_cfg, cycle_path, "train_config.yaml")
+                save_config(agent_cfg, cycle_path, "agent_config.yaml")
+                save_config(env_cfg, cycle_path, "env_config.yaml")
+
+                # === 为每个周期创建专属的EvalCallback ===                
+                # 创建一个独立的评估环境，确保评估过程纯净
+                eval_env = create_env(env_cfg, training=False)
+                eval_env.training = False
+                eval_env.norm_reward = False
+
+                eval_callback_for_cycle = ComponentEvalCallback(
+                    eval_env,
+                    best_model_save_path=cycle_path, # <--- 使用当前周期的路径
+                    log_path=cycle_path,             # <--- 日志也保存在周期路径下
+                    eval_freq=stage_cfg["eval_freq"],
+                    deterministic=True
+                )
                 
-                # We need a complete model folder to pass to the pool manager
-                self.model.save(os.path.join(cycle_path, "best_model")) # Treat it as "best" for this cycle
+                # 组合当前周期需要的所有Callback
+                callbacks_for_this_cycle = [eval_callback_for_cycle, curriculum_callback]
+
+                # 2. 使用为本周期定制的Callback列表进行训练
+                self.model.learn(
+                    total_timesteps=battle_step,
+                    reset_num_timesteps=False,
+                    callback=callbacks_for_this_cycle
+                )
+
+                # 3. 保存周期结束时的最终模型和环境状态
+                self.model.save(os.path.join(cycle_path, "final_model"))
                 train_env.save(os.path.join(cycle_path, "final_train_env.pkl"))
-                shutil.copy(os.path.join("configs", "agent", f"{stage_cfg['agent']}.yaml"), os.path.join(cycle_path, "agent_config.yaml"))
-                shutil.copy(os.path.join("configs", "env", f"{stage_cfg['env']}.yaml"), os.path.join(cycle_path, "env_config.yaml"))
-                logger.info(f"Cycle {completed_cycles} training finished. Candidate model saved to '{cycle_path}'")
+                # # 复制配置文件
+                # shutil.copy(os.path.join(cycle_path, "agent_config.yaml"))
+                # shutil.copy(os.path.join(cycle_path, "env_config.yaml"))
+
+                logger.info(f"周期 {completed_cycles} 训练完成。模型已保存至 '{cycle_path}'")
 
                 # 3. Challenge the opponent pool
                 self.pool_manager.update_pool(new_model_path=cycle_path, n_episodes=n_episodes_eval)
@@ -215,12 +251,13 @@ class UnifiedTrainer:
         except KeyboardInterrupt:
             logger.warning("Battle training interrupted by user (Ctrl+C).")
         finally:
-            logger.info("Saving final battle model and environment state...")
-            final_save_path = os.path.join(stage_path, "final_model_after_battle")
-            os.makedirs(final_save_path, exist_ok=True)
-            self.model.save(os.path.join(final_save_path, "final_model"))
-            train_env.save(os.path.join(final_save_path, "final_train_env.pkl"))
-            logger.info("Battle stage finished.")
+            # logger.info("Saving final battle model and environment state...")
+            # final_save_path = os.path.join(stage_path, "final_model_after_battle")
+            # os.makedirs(final_save_path, exist_ok=True)
+            # self.model.save(os.path.join(final_save_path, "final_model"))
+            # train_env.save(os.path.join(final_save_path, "final_train_env.pkl"))
+            # logger.info("Battle stage finished.")
+            pass
 
 
 if __name__ == "__main__":

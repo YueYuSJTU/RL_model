@@ -36,16 +36,16 @@ class PoolManager:
         self.max_pool_size = max_pool_size
         
         if score_weights is None:
-            # 默认评分系统:
+            # 默认评分系统,评分代表当前模型比这个对手好多少:
             # - 胜率是主要加分项
             # - 失败率是主要扣分项（权重更高，强调避免失败）
             # - 平局有少量加分
-            # - 对手自主坠机是扣分项，因为这表示“赢得不光彩”，我们鼓励主动击败对手
+            # - 对手自主坠机证明当前模型优于对手，有少量加分
             self.score_weights = {
                 'win_rate': 1.0, 
                 'loss_rate': -1.5, 
-                'draw_rate': 0.5,
-                'opponent_fall_rate': -0.5
+                'draw_rate': 0.2,
+                'opponent_fall_rate': 0.8
             }
         else:
             self.score_weights = score_weights

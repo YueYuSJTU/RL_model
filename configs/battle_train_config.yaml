@@ -3,7 +3,7 @@ stage1:
   agent: ppo_1layer
   env: f16_tracking_stage1
   total_timesteps: 300_000 # Train for a fixed number of steps
-  eval_freq: 25000
+  eval_freq: 1000
   log_root: "./experiments"
   seed: 42
   num_cpu: 30
@@ -21,3 +21,5 @@ stage2:
   battle_step: 10_000_000      # Every battle_step, a new model challenges the pool.
   max_pool_size: 8          # Max opponents in the pool.
   n_episodes_eval: 1000      # Episodes per evaluation match.
+  threshold_timesteps: 200_000_000  # Timesteps to reach to increase opponent difficulty(goal point to jsbsim).
+  update_freq_episodes: 1000  # Episodes between opponent difficulty updates.
