@@ -1,4 +1,6 @@
 import os
+import gc
+import torch
 import numpy as np
 from tqdm import tqdm
 import sys
@@ -64,72 +66,68 @@ def evaluate_versus(model_path: str, pool_path: str, opponent_num: int, n_episod
     win_steps = []
     total_rewards = []  # 用于存储每场对战的总奖励
     
-    # 运行对战，使用tqdm显示进度条
-    episodes = range(n_episodes)
-    if use_tqdm:
-        episodes = tqdm(range(n_episodes), desc=f"对战对手{opponent_num}", ncols=80)
+    try:
+        # 运行对战，使用tqdm显示进度条
+        episodes = range(n_episodes)
+        if use_tqdm:
+            episodes = tqdm(range(n_episodes), desc=f"对战对手{opponent_num}", ncols=80)
 
-    for episode in episodes:
-        obs = vec_env.reset()
-        episode_done = False
-        episode_reward = 0  # 初始化本场对战的奖励
-        
-        while not episode_done:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, terminated, info = vec_env.step(action)
+        for episode in episodes:
+            obs = vec_env.reset()
+            episode_done = False
+            episode_reward = 0  # 初始化本场对战的奖励
             
-            episode_reward += reward[0]  # 累加奖励
-            
-            if terminated:
-                episode_done = True
-                total_rewards.append(episode_reward)  # 记录本场对战的总奖励
-                env_info = info[0].get("env_info", {})
-                win_status = env_info.get("win", 0)
+            while not episode_done:
+                action, _ = model.predict(obs, deterministic=True)
+                obs, reward, terminated, info = vec_env.step(action)
                 
-                if win_status == 1:  # 主控胜利
-                    wins += 1
-                    win_steps.append(env_info.get("steps_used", 0))
-                elif win_status == 0:  # 平局
-                    draws += 1
-                elif win_status == -1:  # 敌机胜利
-                    losses += 1
-                elif win_status == 0.5: # 敌机自主坠机
-                    opponent_falls += 1
+                episode_reward += reward[0]  # 累加奖励
+                
+                if terminated:
+                    episode_done = True
+                    total_rewards.append(episode_reward)  # 记录本场对战的总奖励
+                    env_info = info[0].get("env_info", {})
+                    win_status = env_info.get("win", 0)
+                    
+                    if win_status == 1:  # 主控胜利
+                        wins += 1
+                        win_steps.append(env_info.get("steps_used", 0))
+                    elif win_status == 0:  # 平局
+                        draws += 1
+                    elif win_status == -1:  # 敌机胜利
+                        losses += 1
+                    elif win_status == 0.5: # 敌机自主坠机
+                        opponent_falls += 1
+        
+        # 计算统计数据
+        win_rate = wins / n_episodes
+        draw_rate = draws / n_episodes
+        loss_rate = losses / n_episodes
+        opponent_fall_rate = opponent_falls / n_episodes
+        avg_win_time = np.mean(win_steps) if win_steps else 0
+        avg_reward = np.mean(total_rewards)  # 计算平均奖励
     
-    # 计算统计数据
-    win_rate = wins / n_episodes
-    draw_rate = draws / n_episodes
-    loss_rate = losses / n_episodes
-    opponent_fall_rate = opponent_falls / n_episodes
-    avg_win_time = np.mean(win_steps) if win_steps else 0
-    avg_reward = np.mean(total_rewards)  # 计算平均奖励
+    finally:
+        # === [关键] 显式清理代码 ===
 
-
-    # # 另一种评估方法
-    # from stable_baselines3.common.evaluation import evaluate_policy
-    # vec_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
-    # # vec_env = VecNormalize.load(
-    # #     os.path.join(model_path, "final_train_env.pkl"), 
-    # #     vec_env
-    # # )
-    # vec_env.training = False
-    # vec_env.norm_reward = False
-
-    # # 加载主模型
-    # model = PPO.load(
-    #     os.path.join(model_path, "best_model"),
-    #     env=vec_env,
-    #     device=agent_cfg["device"]
-    # )
-    # episode_rewards, episode_lengths = evaluate_policy(
-    #             model,
-    #             vec_env,
-    #             n_eval_episodes=100
-    #         )
-    # print(f"Debug from evaluate_versus: sb3 method: {episode_rewards}")
-    # print(f"Debug from evaluate_versus: my method: {avg_reward}")
-
-    
+        # 1. 关闭环境，这将终止所有相关的子进程
+        if 'vec_env' in locals() and vec_env is not None:
+            vec_env.close()
+        
+        # 2. 从内存中删除模型和环境对象
+        if 'model' in locals():
+            del model
+        if 'vec_env' in locals():
+            del vec_env
+        
+        # 3. 强制运行Python的垃圾回收器
+        gc.collect()
+        
+        # 4. 强制清空PyTorch未被使用的CUDA缓存
+        # 这是最重要的一步，它会把显存还给操作系统
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+  
     return win_rate, draw_rate, loss_rate, opponent_fall_rate, avg_win_time, avg_reward
 
 def save_results(results: Dict, log_dir: str, model_name: str) -> None:
