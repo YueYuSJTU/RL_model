@@ -1,4 +1,6 @@
 import os
+import gc
+import torch
 import yaml
 import shutil
 import argparse
@@ -148,6 +150,13 @@ class UnifiedTrainer:
             if not os.path.exists(self.last_best_model_path):
                  self.last_best_model_path = os.path.join(exp_path, "final_model.zip")
             logger.info(f"Normal stage '{stage_key}' finished. Best model is at: {self.last_best_model_path}")
+            # === 显式资源清理，否则爆显存 ===
+            eval_env.close()
+            del eval_env
+            del train_env
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def _run_battle_stage(self, stage_cfg: Dict[str, Any], stage_path: str):
         """Executes the cyclical battle training stage."""
@@ -245,19 +254,24 @@ class UnifiedTrainer:
 
                 logger.info(f"周期 {completed_cycles} 训练完成。模型已保存至 '{cycle_path}'")
 
+                # === 显式资源清理，否则爆显存 ===
+                eval_env.close()
+                del eval_env
+                del eval_callback_for_cycle
+                del callbacks_for_this_cycle
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
                 # 3. Challenge the opponent pool
                 self.pool_manager.update_pool(new_model_path=cycle_path, n_episodes=n_episodes_eval)
         
         except KeyboardInterrupt:
             logger.warning("Battle training interrupted by user (Ctrl+C).")
         finally:
-            # logger.info("Saving final battle model and environment state...")
-            # final_save_path = os.path.join(stage_path, "final_model_after_battle")
-            # os.makedirs(final_save_path, exist_ok=True)
-            # self.model.save(os.path.join(final_save_path, "final_model"))
-            # train_env.save(os.path.join(final_save_path, "final_train_env.pkl"))
-            # logger.info("Battle stage finished.")
-            pass
+            if 'train_env' in locals():
+                train_env.close()
+            logger.info("Battle stage finished.")
 
 
 if __name__ == "__main__":
