@@ -21,7 +21,8 @@ class PoolManager:
     """
     
     def __init__(self, pool_path: str, max_pool_size: int = 10, 
-                 score_weights: Dict[str, float] = None):
+                 score_weights: Dict[str, float] = None,
+                 whitelist: List[str] = ["1"]):
         """
         初始化 PoolManager.
 
@@ -31,9 +32,13 @@ class PoolManager:
             score_weights (Dict[str, float], optional): 
                 用于计算模型综合评分的权重字典。
                 默认为: {'win_rate': 1.0, 'loss_rate': -1.5, 'draw_rate': 0.5, 'opponent_fall_rate': -0.5}
+            whitelist (List[str], optional): 不会被替换的模型编号列表 (例如: ["1", "5"])。
         """
         self.pool_path = pool_path
         self.max_pool_size = max_pool_size
+        self.whitelist = set(whitelist) if whitelist is not None else set()
+        if self.whitelist:
+            logging.info(f"对手池白名单已激活，受保护的模型: {sorted(list(self.whitelist))}")
         
         if score_weights is None:
             # 默认评分系统,评分代表当前模型比这个对手好多少:
@@ -163,9 +168,20 @@ class PoolManager:
             logging.info("新模型未能战胜任何现有对手，对手池不作变更。")
             return
         
+        # === 从被击败的对手中，筛选出“可被替换”的候选人 ===
+        replaceable_candidates = {
+            name: score for name, score in defeated_opponents.items() if name not in self.whitelist
+        }
+        # 如果筛选后，没有可替换的候选人了（例如，所有被击败的都在白名单里）
+        if not replaceable_candidates:
+            logging.info(
+                "新模型战胜了一些对手，但所有被战胜的对手都在白名单中。对手池不作变更。"
+            )
+            return
+        
         # 如果战胜了至少一个对手，找出被最“轻松”击败的那个（即新模型得分最高的对局）
-        victim_name = max(defeated_opponents, key=defeated_opponents.get)
-        victim_score = defeated_opponents[victim_name]
+        victim_name = max(replaceable_candidates, key=replaceable_candidates.get)
+        victim_score = replaceable_candidates[victim_name]
 
         logging.info(f"新模型战胜了 {len(defeated_opponents)} 个对手。")
         logging.info(f"表现最差的对手是 '{victim_name}' (新模型得分 {victim_score:.3f})。")
