@@ -46,11 +46,12 @@ class PoolManager:
             # - 失败率是主要扣分项（权重更高，强调避免失败）
             # - 平局有少量加分
             # - 对手自主坠机证明当前模型优于对手，有少量加分
+            # 请注意只有总分大于0才会触发替换，不光要看相对值，还要看绝对值
             self.score_weights = {
                 'win_rate': 1.0, 
-                'loss_rate': -1.5, 
-                'draw_rate': 0.2,
-                'opponent_fall_rate': 0.8
+                'loss_rate': -1.0, 
+                'draw_rate': 0.0,
+                'opponent_fall_rate': 0.5
             }
         else:
             self.score_weights = score_weights
