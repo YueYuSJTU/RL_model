@@ -5,6 +5,7 @@
 logs/
 experiments/
 opponent_pool/
+condaenv*
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

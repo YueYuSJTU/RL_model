@@ -1,0 +1,26 @@
+# environment.yml
+
+name: js_gpu
+
+#指定Conda搜索包的频道 (channel)，顺序很重要
+#    pytorch和conda-forge通常应该放在前面
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.9
+  - scipy
+  - numpy
+  - matplotlib
+  - pip
+
+  - pip:
+    - stable-baselines3[extra]
+    - jsbgym
+    - tqdm
+    - pyyaml
+    - pyquaternion
+    - opencv-python

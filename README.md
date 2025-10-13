@@ -11,50 +11,145 @@
 
 ## 0. 环境配置
 
-安装本项目所需依赖。核心依赖包括：
+本项目使用 [Conda](https://docs.conda.io/en/latest/miniconda.html) 进行环境管理，以确保所有依赖（包括Python包和CUDA工具链）的一致性和可复现性。
 
--   `jsbgym`
--   `stable-baselines3`
+### 安装步骤
 
-*具体的安装步骤和其余零散库将在项目稳定后补充。*
+1.  **克隆本仓库**
+    ```bash
+    git clone [您的仓库地址]
+    cd [您的仓库目录]
+    ```
+
+2.  **通过 `environment.yml` 文件创建Conda环境**
+    本项目所有依赖都已定义在 `environment.yml` 文件中。请运行以下命令来创建名为 `js_gpu` 的虚拟环境并安装所有依赖：
+    ```bash
+    conda env create -f environment.yml
+    ```
+
+3.  **激活新创建的环境**
+    创建成功后，您需要激活该环境才能开始工作：
+    ```bash
+    conda activate js_gpu
+    ```
+    当您看到终端提示符前出现 `(js_gpu)` 字样时，表示环境已成功激活。
 
 ---
 
 ## 1. 启动训练
 
-通过 `src.stageTrain` 模块启动训练。
+通过 `src.stageTrain` 模块启动训练。所有训练都应在 `js_gpu` 环境下进行。
 
-**启动参数:**
-
--   `--config`: 训练配置文件路径 (e.g., `"configs/stage_train_config.yaml"`)。
--   `--eval_pool`: 评估时使用的对手池路径 (e.g., `"/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3"`)。
--   `--pretrained_path`: 预训练模型路径。用于微调或继续训练。
-
-**训练模式:**
+**本地直接启动 (用于调试或小型实验):**
 
 -   **预训练模式**: 不提供 `--pretrained_path` 参数。脚本将自动创建一个以当前日期和时间命名的文件夹来保存训练记录。
 -   **微调模式**: 提供 `--pretrained_path` 参数，指定一个已有的日期文件夹。脚本会自动搜索该文件夹下最新的 `stage` 并进行微调。
+
     > **注意**: 微调模式的配置文件 (`config`) 只支持一个 `stage`。
 
-**示例:**
-
+**本地启动示例:**
 ```bash
 python -m src.stageTrain \
     --config "configs/stage_train_config.yaml" \
     --eval_pool "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool3" \
     --pretrained_path "experiments/20250921_162658"
 ```
-
 ---
-
-**battle 训练模式**
+**battle 训练模式 (本地后台运行)**
 ```bash
 nohup python -m src.train.battle_train --config "configs/battle_train_config.yaml" --pool_path "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool4" >output.log 2>&1 &
 ```
+---
+## 2. 在HPC平台通过Slurm提交训练任务
+
+对于大规模或长时间的训练，建议使用HPC平台的Slurm作业调度系统。
+
+### 2.1 编写Slurm脚本
+
+您可以使用项目根目录下的 `run_training.sh` 脚本模板。该脚本负责申请计算资源并执行您的训练命令。
+
+**`run_training.sh` 示例:**
+```bash
+#!/bin/bash
+
+#=======================================================================
+# SLURM 资源申请指令
+#=======================================================================
+# -- 任务名，方便您识别
+#SBATCH --job-name=exp1_resnet50
+
+# -- 指定标准输出和错误日志的路径 (%j 会被替换为任务ID)
+#SBATCH --output=logs/resnet50_%j.out
+#SBATCH --error=logs/resnet50_%j.err
+
+# -- 指定任务提交到哪个计算分区
+#SBATCH --partition=compute
+
+# -- 申请GPU资源 (请根据集群可用资源修改)
+#SBATCH --gres=gpu:rtx5090:1
+
+# -- 申请CPU和内存资源
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+
+#=======================================================================
+# 您的程序运行命令
+#=======================================================================
+echo "========================================================"
+echo "Job ID: ${SLURM_JOB_ID}"
+echo "Job started on: $(hostname) at $(date)"
+echo "========================================================"
+
+# --- 1. 激活您的Conda环境 ---
+source $(conda info --base)/etc/profile.d/conda.sh
+conda activate js_gpu
+
+echo "Conda environment 'js_gpu' activated."
+
+# --- 2. 运行您的Python训练脚本 ---
+# !!! 重要: 请在此处修改为您本次实验的真实参数 !!!
+python -u -m src.stageTrain \
+    --config "configs/stage_train_config.yaml" \
+    --eval_pool "/path/to/your/opponent_pool/pool3"
+
+echo "========================================================"
+echo "Job finished at: $(date)"
+echo "========================================================"
+```
+
+### 2.2 提交与监控任务
+
+1.  **提交任务**
+    根据您的实验需求修改好 `run_training.sh` 脚本中的资源申请和Python命令参数后，使用 `sbatch` 命令提交任务：
+    ```bash
+    sbatch run_training.sh
+    ```
+
+2.  **监控任务状态**
+    您可以使用以下命令来查看您的任务状态：
+    ```bash
+    # 查看您自己提交的所有任务
+    squeue -u <您的用户名>
+
+    # 查看任务的详细信息
+    scontrol show job <任务ID>
+    ```
+
+3.  **查看日志**
+    任务运行产生的输出和错误信息会保存在您脚本中指定的 `logs/` 目录下。例如，查看输出日志：
+    ```bash
+    cat logs/resnet50_<任务ID>.out
+    ```
+
+4.  **取消任务**
+    如果需要提前终止任务，可以使用 `scancel` 命令：
+    ```bash
+    scancel <任务ID>
+    ```
 
 ---
 
-## 2. 配置文件编写
+## 3. 配置文件编写
 
 所有配置文件位于 `configs/` 文件夹下。
 
@@ -64,9 +159,9 @@ nohup python -m src.train.battle_train --config "configs/battle_train_config.yam
 
 ---
 
-## 3. 评估实验
+## 4. 评估实验
 
-### 3.1 对战评估
+### 4.1 对战评估
 
 此脚本用于评估某个已训练模型的胜率，结果将以 `.txt` 和 `.npy` 格式存储。
 
@@ -76,14 +171,14 @@ nohup python -m src.train.battle_train --config "configs/battle_train_config.yam
 ./evalate.sh
 ```
 
-### 3.2 goal point模型评估
+### 4.2 goal point模型评估
 ```bash
 python ./test/evaluate_goal_point.py --n_episodes 1000 --exp_path "experiments/goal_point/20250922_095754/stage1/20250923_203916_GoalPointTask_ppo_1layer"
 ```
 
 ---
 
-## 4. 展示实验
+## 5. 展示实验
 
 通过可视化方式回放和展示实验效果。
 
