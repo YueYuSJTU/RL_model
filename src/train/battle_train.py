@@ -107,8 +107,9 @@ class UnifiedTrainer:
         save_config(env_cfg, exp_path, "env_config.yaml")
         
         # --- Create Environments ---
-        train_env = create_env(env_cfg, training=True, num_cpu=stage_cfg["num_cpu"])
-        eval_env = create_env(env_cfg, training=False)
+        vec_env_kwargs = {"pool_roots": self.pool_path}
+        train_env = create_env(env_cfg, training=True, num_cpu=stage_cfg["num_cpu"], vec_env_kwargs=vec_env_kwargs)
+        eval_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
         eval_env.training = False
         eval_env.norm_reward = False
 
@@ -223,7 +224,7 @@ class UnifiedTrainer:
 
                 # === 为每个周期创建专属的EvalCallback ===                
                 # 创建一个独立的评估环境，确保评估过程纯净
-                eval_env = create_env(env_cfg, training=False)
+                eval_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
                 eval_env.training = False
                 eval_env.norm_reward = False
 

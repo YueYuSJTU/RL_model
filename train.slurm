@@ -1,5 +1,5 @@
 #!/bin/bash
-
+set -e
 #=======================================================================
 # SLURM 资源申请指令
 #=======================================================================
@@ -19,7 +19,7 @@
 #SBATCH --gres=gpu:rtx5090:1
 
 # -- CPU Request: 每个任务申请的CPU核心数
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=16
 
 # -- Memory Request: 申请的内存大小
 #SBATCH --mem=64G
@@ -27,6 +27,7 @@
 #=======================================================================
 # 您的程序运行命令
 #=======================================================================
+cd $SLURM_SUBMIT_DIR
 echo "========================================================"
 echo "Job ID: ${SLURM_JOB_ID}"
 echo "Job started on: $(hostname) at $(date)"
@@ -40,8 +41,7 @@ conda activate js_gpu
 echo "Virtual environment activated."
 
 # --- 2. 运行您的Python训练脚本 ---
-#    -u 参数表示不使用缓冲区，可以实时看到print的输出
-nohup python -m src.train.battle_train --config "configs/battle_train_config.yaml" --pool_path "/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool1" >output.log 2>&1 &
+python -u -m src.train.battle_train --config "configs/battle_train_config.yaml" --pool_path "opponent_pool/pool4"
 
 echo "========================================================"
 echo "Job finished at: $(date)"
