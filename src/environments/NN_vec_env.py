@@ -36,7 +36,7 @@ class NNVecEnv(SubprocVecEnv):
             self, 
             env_fns, 
             start_method=None, 
-            pool_roots: Union[str, List[str]] = """/home/ubuntu/Workfile/RL/RL_model/opponent_pool/pool4""",
+            pool_roots: Union[str, List[str]] = None,
             model_num: int = 0
         ):
         # 为了减半observation space和action space，必须复制父类init代码
@@ -130,6 +130,9 @@ class NNVecEnv(SubprocVecEnv):
         如果编号为-1,则不加载模型
         """
         strategy_dirs = []
+        # 如果编号为-1,则不加载模型
+        if self.model_num == -1:
+            return strategy_dirs
         
         # 检查根目录是否存在
         if not os.path.exists(root_dir):
@@ -143,9 +146,6 @@ class NNVecEnv(SubprocVecEnv):
                 return strategy_dirs
             else:
                 raise ValueError(f"Model path {model_path} does not exist or is invalid")
-        # 如果编号为-1,则不加载模型
-        elif self.model_num == -1:
-            return strategy_dirs
             
         # 遍历根目录下所有子目录
         for item in os.listdir(root_dir):
