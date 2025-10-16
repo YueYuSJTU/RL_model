@@ -17,6 +17,7 @@
                 // "experiments/goal_point/20250918_112529/stage1/20250918_112529_GoalPointTask_ppo_1layer",
                 "--render_mode", "human",
                 "--random_input", "False",
+                "--pool_path", "./opponent_pool/pool4",
                 "--model_num", "0",
             ]
         },

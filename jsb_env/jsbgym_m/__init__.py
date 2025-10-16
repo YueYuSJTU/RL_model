@@ -7,7 +7,7 @@ parent_dir = os.path.join(os.path.dirname(current_file_path), "..")
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 from jsbgym_m.tasks import Task, HeadingControlTask, TurnHeadingControlTask, Shaping
-from jsbgym_m.task_tracking import TrackingTask, Opponent
+from jsbgym_m.task_tracking import TrackingTask
 from jsbgym_m.aircraft import Aircraft, c172, f16
 from jsbgym_m import utils
 

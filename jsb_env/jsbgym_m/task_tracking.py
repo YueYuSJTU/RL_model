@@ -21,114 +21,6 @@ from jsbgym_m.task_advanced import TrajectoryTask
 from jsbgym_m.coordinate import GPS_utils, GPS_NED
 from stable_baselines3 import PPO
 
-class Opponent(object):
-    """
-    Base class for the opponent aircraft.
-
-    Arbitrarily fly straightly towards an arbitrary direction.
-    """
-
-    def __init__(self):
-        self._state = {
-            "x_position_ft": 0,
-            "y_position_ft": 0,
-            "altidude_sl_ft": 0,
-            "roll_rad": 0,
-            "pitch_rad": 0,
-            "heading_deg": 0,
-            "u_fps": 0,
-            "v_fps": 0,
-            "w_fps": 0,
-            "p_radps": 0,
-            "q_radps": 0,
-            "r_radps": 0,
-            "alpha_deg": 0,
-            "beta_deg": 0,
-            "vtrue_fps": 0,
-        }
-        self.init_point = (0, 0, 0)
-        self.init_direction = 0
-        self.init_speed = 0
-    
-    def reset(self):
-        """
-        Reset the opponent aircraft.
-        """
-        self.init_point = self._randomly_choose_init_point()
-        self.init_direction = self._randomly_choose_init_dirction()
-        self.init_speed = self._randomly_choose_init_speed()
-        self._state = {
-            "x_position_ft": self.init_point[0],
-            "y_position_ft": self.init_point[1],
-            "altidude_sl_ft": self.init_point[2],
-            "roll_rad": 0,
-            "pitch_rad": 0,
-            "heading_deg": math.degrees(self.init_direction),
-            "u_fps": self.init_speed,
-            "v_fps": 0,
-            "w_fps": 0,
-            "p_radps": 0,
-            "q_radps": 0,
-            "r_radps": 0,
-            "alpha_deg": 0,
-            "beta_deg": 0,
-            "vtrue_fps": self.init_speed,
-        }
-    
-    def _randomly_choose_init_point(self):
-        """
-        Randomly choose the initial point of the opponent aircraft.
-        """
-        x = np.random.uniform(-6000, -4000) if random.random() < 0.5 else np.random.uniform(4000, 6000)
-        y = np.random.uniform(-6000, -4000) if random.random() < 0.5 else np.random.uniform(4000, 6000)
-        # h = np.random.uniform(-400, -700)
-        h = 6000
-        return (x, y, h)
-    
-    def _randomly_choose_init_dirction(self):
-        """
-        Randomly choose the initial direction of the opponent aircraft.
-        """
-        return np.random.uniform(0, 2 * math.pi)
-    
-    def _randomly_choose_init_speed(self):
-        """
-        Randomly choose the initial speed of the opponent aircraft.
-        """
-        return np.random.uniform(700, 1000)
-
-    def step(self, frequency):
-        """
-        Move the opponent aircraft.
-        """
-        new_x, new_y = self._calculate_position(frequency)
-        self._state["x_position_ft"] = new_x
-        self._state["y_position_ft"] = new_y
-        return self._state
-
-    def _calculate_position(self, frequency):
-        """
-        Calculate the position of the opponent aircraft.
-        """
-        time = 1 / frequency
-        x = self._state["x_position_ft"]
-        y = self._state["y_position_ft"]
-        heading_angle = math.radians(self._state["heading_deg"])
-        speed = self._state["u_fps"]
-        x += speed * time * math.cos(heading_angle)
-        y += speed * time * math.sin(heading_angle)
-        return x, y
-
-
-    def get_state(self) -> np.ndarray:
-        """
-        Get the state of the opponent aircraft.
-
-        :return: the state of the opponent aircraft
-        """
-        return self._state.copy()
-
-
 class TrackingTask(FlightTask):
     """
     Base class for tracking tasks.
@@ -358,7 +250,7 @@ class TrackingTask(FlightTask):
 
         super().__init__(assessor)
     
-    def _create_opponent(self) -> Opponent:
+    def _create_opponent(self):
         """
         Create the opponent aircraft.
         """
@@ -587,12 +479,13 @@ class TrackingTask(FlightTask):
             else:
                 # 平局
                 win = 0
-            # print(f"debug: steps_left: {sim[self.steps_left]}, win: {win}")
             env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
         if self.debug:
             self._validate_state(state, terminated, truncated, self_action, reward)
         self._store_reward(reward, sim)
         self.last_state = state
+        # debug goal_point_prob
+        reward_components.update({"goal_point_prob": self.goal_point_prob})
         info = {"reward": reward_components, "env_info": env_info}
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
         observation = self.observation_normalization(observation)
@@ -741,24 +634,7 @@ class TrackingTask(FlightTask):
         Calculate the state of the opponent aircraft.
         """
         # get raw data
-        if isinstance(self.opponent, Opponent):
-            oppo_state = self.opponent.step(self.step_frequency_hz)
-            sim[self.oppo_x_ft] = oppo_state["x_position_ft"]
-            sim[self.oppo_y_ft] = oppo_state["y_position_ft"]
-            sim[self.oppo_altitude_sl_ft] = oppo_state["altidude_sl_ft"]
-            sim[self.oppo_roll_rad] = oppo_state["roll_rad"]
-            sim[self.oppo_pitch_rad] = oppo_state["pitch_rad"]
-            sim[self.oppo_heading_deg] = oppo_state["heading_deg"]
-            sim[self.oppo_u_fps] = oppo_state["u_fps"]
-            sim[self.oppo_v_fps] = oppo_state["v_fps"]
-            sim[self.oppo_w_fps] = oppo_state["w_fps"]
-            sim[self.oppo_p_radps] = oppo_state["p_radps"]
-            sim[self.oppo_q_radps] = oppo_state["q_radps"]
-            sim[self.oppo_r_radps] = oppo_state["r_radps"]
-            sim[self.oppo_alpha_deg] = oppo_state["alpha_deg"]
-            sim[self.oppo_beta_deg] = oppo_state["beta_deg"]
-            sim[self.oppo_vtrue_fps] = oppo_state["vtrue_fps"]
-        elif self.opponent == "jsbsim" or self.opponent == "goal_point":
+        if self.opponent == "jsbsim" or self.opponent == "goal_point":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. You should give it when calculating opponent state.")
             
@@ -924,7 +800,6 @@ class TrackingTask(FlightTask):
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
         # add_reward = 0
         reward.set_additional_reward(add_reward)
-        # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward
 
     def observe_first_state(self, sim: Simulation, opponent_sim: Simulation=None) -> np.ndarray:
@@ -952,9 +827,7 @@ class TrackingTask(FlightTask):
         opponent_sim[self.aircraft_HP] = self.HP
         self.goal_point = self.get_goal_point()
 
-        if isinstance(self.opponent, Opponent):
-            self.opponent.reset()
-        elif self.opponent == "jsbsim" or self.opponent == "goal_point":
+        if self.opponent == "jsbsim" or self.opponent == "goal_point":
             if opponent_sim is None:
                 raise ValueError("Opponent_sim is None. You should give it when restart a new episode.")
             super()._new_episode_init(opponent_sim)
@@ -1231,5 +1104,4 @@ class TrackingInitTask(TrackingTask):
         #     add_reward -= sim[self.steps_left] #/ self.steps_left.max
         add_reward = 0
         reward.set_additional_reward(add_reward)
-        # print(f"debug: add_rwd:{add_reward}, self_HP:{sim[self.aircraft_HP]}, opponent_HP:{sim[self.opponent_HP]}")
         return reward

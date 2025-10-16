@@ -227,6 +227,8 @@ class UnifiedTrainer:
                 eval_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
                 eval_env.training = False
                 eval_env.norm_reward = False
+                # 确保评估环境的课程学习状态与训练环境同步
+                eval_env.env_method("update_task_parameters", goal_point_prob=curriculum_callback.last_update_prob)
 
                 eval_callback_for_cycle = ComponentEvalCallback(
                     eval_env,

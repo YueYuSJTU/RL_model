@@ -9,7 +9,7 @@ from src.environments.make_env import create_env
 from src.utils.serialization import load_config
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-def show(exp_path: str, render_mode: str = "human", random_input: bool = False, model_num: int = 0) -> None:
+def show(exp_path: str, render_mode: str = "human", random_input: bool = False, model_num: int = 0, pool_path: str = None) -> None:
     # 加载实验配置
     env_cfg = load_config(os.path.join(exp_path, "env_config.yaml"))
     agent_cfg = load_config(os.path.join(exp_path, "agent_config.yaml"))
@@ -19,7 +19,7 @@ def show(exp_path: str, render_mode: str = "human", random_input: bool = False, 
     env_cfg["use_vec_normalize"] = False
     
     # 创建评估环境
-    vec_env = create_env(env_cfg, training=False, vec_env_kwargs={"model_num": model_num})
+    vec_env = create_env(env_cfg, training=False, vec_env_kwargs={"model_num": model_num, "pool_roots": pool_path})
     env_pkl = "best_env.pkl" if os.path.exists(os.path.join(exp_path, "best_env.pkl")) else "final_train_env.pkl"
     vec_env = VecNormalize.load(
         os.path.join(exp_path, env_pkl), 
@@ -27,6 +27,7 @@ def show(exp_path: str, render_mode: str = "human", random_input: bool = False, 
     )
     vec_env.training = False
     vec_env.norm_reward = False
+    vec_env.env_method("update_task_parameters", goal_point_prob=0.0)
 
     # 加载模型
     model = PPO.load(
@@ -63,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument("--exp_path", type=str, required=True)
     parser.add_argument("--render_mode", type=str, default="human")
     parser.add_argument("--random_input", type=bool, default=False)
+    parser.add_argument("--pool_path", type=str, default=None, help="Path to the opponent pool directory.")
     parser.add_argument("--model_num", type=int, default=0, help="Model number for multi-agent environments")
     args = parser.parse_args()
-    show(args.exp_path, args.render_mode, args.random_input, model_num=args.model_num)
+    show(args.exp_path, args.render_mode, args.random_input, model_num=args.model_num, pool_path=args.pool_path)

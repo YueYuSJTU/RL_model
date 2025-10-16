@@ -130,7 +130,7 @@ class EpisodeCurriculumCallback(BaseCallback):
         
         # 内部状态
         self.episode_count = 0
-        self.last_update_prob = -1.0
+        self.last_update_prob = 1.0
         self.is_active = True  # 关键：Callback的活动状态标志
 
         if self.verbose > 0:

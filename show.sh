@@ -216,6 +216,40 @@ fi
 echo "已选择渲染模式: $render_mode"
 echo ""
 
+opponent_pool_path_param=""
+if [ "$is_goal_point_mode" -eq 0 ]; then
+    # 选择对手池路径
+    echo "选择对手池路径:"
+    default_pool_dir="./opponent_pool"
+    if [ -d "$default_pool_dir" ]; then
+        pools=($(ls -d "$default_pool_dir"/*/))
+        for i in "${!pools[@]}"; do
+            pool_name=$(basename "${pools[$i]}")
+            echo "[$i] $pool_name"
+        done
+        read -p "请选择对手池 [0-$((${#pools[@]}-1))]: " pool_idx
+
+        if [[ "$pool_idx" =~ ^[0-9]+$ ]] && [ "$pool_idx" -lt "${#pools[@]}" ]; then
+            selected_pool_path="${pools[$pool_idx]}"
+            echo "已选择对手池: $(basename "$selected_pool_path")"
+            opponent_pool_path_param="--pool_path $selected_pool_path"
+        else
+            echo "错误：无效的选择"
+            exit 1
+        fi
+    else
+        echo "警告: 未找到默认对手池目录 '$default_pool_dir'。"
+        read -p "请输入对手池路径: " selected_pool_path
+        if [ -d "$selected_pool_path" ]; then
+            opponent_pool_path_param="--pool_path $selected_pool_path"
+        else
+            echo "错误：路径 '$selected_pool_path' 不存在或不是一个目录。"
+            exit 1
+        fi
+    fi
+    echo ""
+fi
+
 if [ "$is_goal_point_mode" -eq 1 ]; then
     opponent_model_type=-1
     echo "GoalPoint模式下，对手模型类型固定为随机输入"
@@ -248,4 +282,4 @@ model_num_param="--model_num $opponent_model_type"
 
 # 调用Python脚本进行评估
 echo "开始评估..."
-python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" $model_num_param
+python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" $model_num_param $opponent_pool_path_param
