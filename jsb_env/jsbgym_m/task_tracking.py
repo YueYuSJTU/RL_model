@@ -209,9 +209,8 @@ class TrackingTask(FlightTask):
     aircraft_HP = prp.BoundedProperty(
         "aircraft/aircraft_HP", "aircraft HP", 0, HP
     )
-    # opponent_HP = prp.BoundedProperty(
-    #     "opponent/opponent_HP", "opponent HP", 0, HP
-    # )
+    GUN_RANGE = 4500
+    GUN_ANGLE = math.radians(15) # 15 degrees
 
     def __init__(
         self,
@@ -471,7 +470,7 @@ class TrackingTask(FlightTask):
                 # 成功击落
                 win = 1
             elif sim[self.aircraft_HP] <= 0 :#and sim[prp.altitude_sl_ft] > 1:
-                # 自机坠毁或被击落
+                # 被击落
                 win = -1
             elif opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] <= 5:
                 # 对方坠毁
@@ -489,6 +488,8 @@ class TrackingTask(FlightTask):
         info = {"reward": reward_components, "env_info": env_info}
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
         observation = self.observation_normalization(observation)
+
+        # print(f"debug: opponent_hp = {opponent_sim[self.aircraft_HP]}, self_hp = {sim[self.aircraft_HP]}")
 
         return observation, reward.agent_reward(), terminated, False, info
 
@@ -753,24 +754,24 @@ class TrackingTask(FlightTask):
         Update the HP of the aircraft and opponent aircraft.
         """
         # update opponent HP
-        if sim[self.track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
-            damage = (3000 - sim[self.distance_oppo_ft]) / 2500 / self.step_frequency_hz
+        if sim[self.track_angle_rad] <= self.GUN_ANGLE and 500 <= sim[self.distance_oppo_ft] <= self.GUN_RANGE:
+            damage = (self.GUN_RANGE - sim[self.distance_oppo_ft]) / (self.GUN_RANGE - 500) / self.step_frequency_hz
             if opponent_sim[self.aircraft_HP] > 0:
                 opponent_sim[self.aircraft_HP] -= damage
             else:
                 opponent_sim[self.aircraft_HP] = 0
-        if opponent_sim[prp.altitude_sl_ft] <= 1:
-            opponent_sim[self.aircraft_HP] = 0
+        # if opponent_sim[prp.altitude_sl_ft] <= 1:
+        #     opponent_sim[self.aircraft_HP] = 0
 
         # update self HP
-        if opponent_sim[self.track_angle_rad] <= math.radians(2) and 500 <= sim[self.distance_oppo_ft] <= 3000:
-            damage = (3000 - sim[self.distance_oppo_ft]) / 2500 / self.step_frequency_hz
+        if opponent_sim[self.track_angle_rad] <= self.GUN_ANGLE and 500 <= sim[self.distance_oppo_ft] <= self.GUN_RANGE:
+            damage = (self.GUN_RANGE - sim[self.distance_oppo_ft]) / (self.GUN_RANGE - 500) / self.step_frequency_hz
             if sim[self.aircraft_HP] > 0:
                 sim[self.aircraft_HP] -= damage
             else:
                 sim[self.aircraft_HP] = 0
-        if sim[prp.altitude_sl_ft] <= 1:
-            sim[self.aircraft_HP] = 0
+        # if sim[prp.altitude_sl_ft] <= 1:
+        #     sim[self.aircraft_HP] = 0
         
 
     def _update_steps_left(self, sim: Simulation, opponent_sim: Simulation) -> None:
@@ -781,8 +782,12 @@ class TrackingTask(FlightTask):
         # terminate when time >= max, but use math.isclose() for float equality test
         terminal_step = sim[self.steps_left] <= 0
         HP_is_zero = self._is_hp_zero(sim, opponent_sim)
-        return terminal_step or HP_is_zero
+        deck = self._decked(sim, opponent_sim)
+        return terminal_step or HP_is_zero or deck
     
+    def _decked(self, sim: Simulation, opponent_sim: Simulation) -> bool:
+        return sim[prp.altitude_sl_ft] <= 0 or opponent_sim[prp.altitude_sl_ft] <= 0
+
     def _is_hp_zero(self, sim: Simulation, opponent_sim: Simulation) -> bool:
         # print(f"self HP: {sim[self.aircraft_HP]}, opponent HP: {sim[self.opponent_HP]}")
         return sim[self.aircraft_HP] <= 0 or opponent_sim[self.aircraft_HP] <= 0
@@ -790,12 +795,15 @@ class TrackingTask(FlightTask):
     def _reward_terminal_override(
         self, reward: rewards.Reward, sim: Simulation, opponent_sim: Simulation
     ) -> rewards.Reward:
+        # 剩余血量奖励
         if sim[prp.altitude_sl_ft] > 5 and opponent_sim[prp.altitude_sl_ft] > 5:
             add_reward = (self.HP - opponent_sim[self.aircraft_HP]) * 10 #/ (self.steps_left.max - sim[self.steps_left])
         else:
             add_reward = 0.0
+        # 成功击落奖励
         if opponent_sim[self.aircraft_HP] <= 0 and opponent_sim[prp.altitude_sl_ft] > 5:
             add_reward += sim[self.steps_left] * 3.7  # TODO:规范化奖励函数大小
+        # 被击落惩罚
         if sim[self.aircraft_HP] <= 0:
             add_reward -= sim[self.steps_left] #/ self.steps_left.max
         # add_reward = 0
@@ -840,6 +848,7 @@ class TrackingTask(FlightTask):
             self.track_angle_rad,
             self.adverse_angle_rad,
             self.closure_rate,
+            self.aircraft_HP,
             # self.opponent_HP,
             self.steps_left,
         )

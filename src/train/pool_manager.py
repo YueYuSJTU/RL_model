@@ -57,7 +57,7 @@ class PoolManager:
             self.score_weights = score_weights
             
         os.makedirs(self.pool_path, exist_ok=True)
-        logging.info(f"对手池管理器已初始化，路径: '{self.pool_path}', 最大容量: {self.max_pool_size}")
+        logging.info(f"对手池管理器已初始化，路径: '{self.pool_path}'")
 
     def _get_pool_models(self) -> List[str]:
         """扫描并返回池中所有模型的目录名（按数字排序）。"""
