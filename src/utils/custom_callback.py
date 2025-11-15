@@ -25,16 +25,16 @@ class ComponentEvalCallback(EvalCallback):
             verbose=verbose,
             **kwargs
         )
-        # 根据模型保存路径，自动生成统计文件的保存路径
-        if self.best_model_save_path is not None:
-            self.stats_path = os.path.join(self.best_model_save_path, "best_env.pkl")
-        else:
-            self.stats_path = None
-            if self.verbose > 0:
-                print("Warning: best_model_save_path is not specified. VecNormalize stats will not be saved.")
+        # # 根据模型保存路径，自动生成统计文件的保存路径
+        # if self.best_model_save_path is not None:
+        #     self.stats_path = os.path.join(self.best_model_save_path, "best_env.pkl")
+        # else:
+        #     self.stats_path = None
+        #     if self.verbose > 0:
+        #         print("Warning: best_model_save_path is not specified. VecNormalize stats will not be saved.")
         
-        # 用于追踪上一次的最佳奖励，以检测是否更新
-        self._previous_best_reward = self.best_mean_reward
+        # # 用于追踪上一次的最佳奖励，以检测是否更新
+        # self._previous_best_reward = self.best_mean_reward
         self.reward_component_values = defaultdict(list)
         
     def _on_step(self) -> bool:
@@ -56,20 +56,20 @@ class ComponentEvalCallback(EvalCallback):
         if not continue_training:
             return False
 
-        # 检查 best_mean_reward 是否被父类更新了
-        if self.best_mean_reward > self._previous_best_reward:
-            if self.verbose > 0:
-                print(f"New best reward: {self.best_mean_reward:.2f} > {self._previous_best_reward:.2f}. ")
+        # # 检查 best_mean_reward 是否被父类更新了
+        # if self.best_mean_reward > self._previous_best_reward:
+        #     if self.verbose > 0:
+        #         print(f"New best reward: {self.best_mean_reward:.2f} > {self._previous_best_reward:.2f}. ")
             
-            # 确认 stats_path 已设置，并且评估环境是 VecNormalize
-            if self.stats_path is not None and isinstance(self.eval_env, VecNormalize):
-                if self.verbose > 0:
-                    print(f"Saving VecNormalize statistics to {self.stats_path}")
-                # 保存 VecNormalize 的统计数据
-                self.eval_env.save(self.stats_path)
+        #     # 确认 stats_path 已设置，并且评估环境是 VecNormalize
+        #     if self.stats_path is not None and isinstance(self.eval_env, VecNormalize):
+        #         if self.verbose > 0:
+        #             print(f"Saving VecNormalize statistics to {self.stats_path}")
+        #         # 保存 VecNormalize 的统计数据
+        #         self.eval_env.save(self.stats_path)
 
-            # 更新我们追踪的最佳奖励值
-            self._previous_best_reward = self.best_mean_reward
+        #     # 更新我们追踪的最佳奖励值
+        #     self._previous_best_reward = self.best_mean_reward
 
         return True
     

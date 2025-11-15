@@ -146,7 +146,7 @@ class UnifiedTrainer:
         finally:
             logger.info("Saving final model and environment state...")
             self.model.save(os.path.join(exp_path, "final_model"))
-            train_env.save(os.path.join(exp_path, "final_train_env.pkl"))
+            # train_env.save(os.path.join(exp_path, "final_train_env.pkl"))
             self.last_best_model_path = os.path.join(exp_path, "best_model.zip")
             if not os.path.exists(self.last_best_model_path):
                  self.last_best_model_path = os.path.join(exp_path, "final_model.zip")
@@ -250,7 +250,7 @@ class UnifiedTrainer:
 
                 # 3. 保存周期结束时的最终模型和环境状态
                 self.model.save(os.path.join(cycle_path, "final_model"))
-                train_env.save(os.path.join(cycle_path, "final_train_env.pkl"))
+                # train_env.save(os.path.join(cycle_path, "final_train_env.pkl"))
                 # # 复制配置文件
                 # shutil.copy(os.path.join(cycle_path, "agent_config.yaml"))
                 # shutil.copy(os.path.join(cycle_path, "env_config.yaml"))

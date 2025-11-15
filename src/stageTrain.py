@@ -101,7 +101,8 @@ def train(pretrained_path: str = "", config_path: str = "", eval_pool_path: str 
         if train_cfg.get("model_num") is not None:
             vec_env_kwargs={"model_num": train_cfg["model_num"]}
         else:
-            vec_env_kwargs=None
+            vec_env_kwargs={}
+        vec_env_kwargs.update({"pool_roots": eval_pool_path} )
         train_env = create_env(env_cfg, training=True, num_cpu=train_cfg["num_cpu"], vec_env_kwargs=vec_env_kwargs)
         eval_env = create_env(env_cfg, training=False, vec_env_kwargs=vec_env_kwargs)
         eval_env.training = False
@@ -154,7 +155,7 @@ def train(pretrained_path: str = "", config_path: str = "", eval_pool_path: str 
 
         # 保存最终模型和环境
         model.save(os.path.join(log_path, "final_model"))
-        train_env.save(os.path.join(log_path, "final_train_env.pkl"))
+        # train_env.save(os.path.join(log_path, "final_train_env.pkl"))
 
         # 复制 best_model.zip 到父目录
         best_model_path = os.path.join(log_path, "best_model.zip")
