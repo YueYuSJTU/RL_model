@@ -4,6 +4,7 @@ import numpy as np
 import logging
 from typing import Dict, List
 from src.evaluate_pool import evaluate_versus
+from src.show import evaluate_without_NN
 
 
 # 设置日志记录
@@ -47,11 +48,14 @@ class PoolManager:
             # - 平局有少量加分
             # - 对手自主坠机证明当前模型优于对手，有少量加分
             # 请注意只有总分大于0才会触发替换，不光要看相对值，还要看绝对值
+            # 如果都是平局，则把hp纳入考虑范围，鼓励打掉对手生命值
             self.score_weights = {
                 'win_rate': 1.0, 
                 'loss_rate': -1.0, 
                 'draw_rate': 0.0,
-                'opponent_fall_rate': 0.5
+                'opponent_fall_rate': 0.5,
+                'avg_hp': 0.01,
+                'avg_hp_oppo': -0.01
             }
         else:
             self.score_weights = score_weights
@@ -135,18 +139,32 @@ class PoolManager:
             opponent_num = int(opponent_name)
             logging.info(f"对战开始: 新模型 vs. 对手 '{opponent_name}'")
             
-            win_rate, draw_rate, loss_rate, opponent_fall_rate, _, _ = evaluate_versus(
-                model_path=new_model_path,
-                pool_path=self.pool_path,
-                opponent_num=opponent_num,
+            # win_rate, draw_rate, loss_rate, opponent_fall_rate, _, _ = evaluate_versus(
+            #     model_path=new_model_path,
+            #     pool_path=self.pool_path,
+            #     opponent_num=opponent_num,
+            #     n_episodes=n_episodes,
+            #     use_tqdm=False
+            # )
+            results = evaluate_without_NN(
+                model1_path=new_model_path,
+                model2_path=os.path.join(self.pool_path, opponent_name),
                 n_episodes=n_episodes,
+                render_mode=None,
                 use_tqdm=False
             )
+            win_rate = results["win_rate"]
+            draw_rate = results["draw_rate"]
+            loss_rate = results["loss_rate"]
+            opponent_fall_rate = results["opponent_fall_rate"]
+            HP_avg = results["avg_hp"]
+            HP_oppo_avg = results["avg_hp_oppo"]
             
             # 记录这场对战的结果
             match_results[opponent_name] = {
                 "win_rate": win_rate, "draw_rate": draw_rate,
-                "loss_rate": loss_rate, "opponent_fall_rate": opponent_fall_rate
+                "loss_rate": loss_rate, "opponent_fall_rate": opponent_fall_rate,
+                "avg_hp": HP_avg, "avg_hp_oppo": HP_oppo_avg
             }
 
         # 计算新模型对战每个对手的得分
@@ -157,7 +175,9 @@ class PoolManager:
         logging.info("--- 对战评估结果 ---")
         for name, score in match_scores.items():
             stats = match_results[name]
-            logging.info(f"vs. 对手 '{name}': Win={stats['win_rate']:.2%}, Loss={stats['loss_rate']:.2%}, Draw={stats['draw_rate']:.2%}, Opponent fall={stats['opponent_fall_rate']:.2%}. --> 得分: {score:.3f}")
+            part1 = f"vs. 对手 '{name}': Win={stats['win_rate']:.2%}, Loss={stats['loss_rate']:.2%}, Draw={stats['draw_rate']:.2%}, "
+            part2 = f"Opponent fall={stats['opponent_fall_rate']:.2%}, HP_avg={stats['avg_hp']:.2f}, HP_oppo_avg={stats['avg_hp_oppo']:.2f}. --> 得分: {score:.3f}"
+            logging.info(part1 + part2)
 
         # 找出被新模型“战胜”的对手（得分 > 0）
         defeated_opponents = {

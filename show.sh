@@ -180,106 +180,115 @@ selected_result_name=$(basename "$selected_result")
 echo "已选择训练结果: $selected_result_name"
 echo ""
 
-if [ "$is_goal_point_mode" -eq 1 ]; then
-    render_mode="human"
-    echo "GoalPoint模式下，渲染模式固定为human"
+# 新增：选择模式
+echo "请选择运行模式:"
+echo "[0] 可视化 (Visualization)"
+echo "[1] 定量评估 (Quantitative Evaluation)"
+read -p "请输入选择 [0-1]: " run_mode_idx
+
+n_episode=1
+render_mode="human"
+
+if [ "$run_mode_idx" -eq 0 ]; then
+    # 可视化模式
+    if [ "$is_goal_point_mode" -eq 1 ]; then
+        render_mode="human"
+        echo "GoalPoint模式下，渲染模式固定为human"
+    else
+        # 询问用户使用什么渲染模式
+        echo "可用的渲染模式:"
+        echo "[0] human"
+        echo "[1] anim3d"
+        echo "[2] flightgear"
+        echo "[3] none"
+
+        read -p "请选择渲染模式 [0-3]: " mode_idx
+
+        case $mode_idx in
+            0) render_mode="human" ;;
+            1) render_mode="anim3d" ;;
+            2) render_mode="flightgear" ;;
+            3) render_mode="none" ;;
+            *) echo "错误：无效的选择"; exit 1 ;;
+        esac
+    fi
+    echo "已选择渲染模式: $render_mode"
+elif [ "$run_mode_idx" -eq 1 ]; then
+    # 定量评估模式
+    render_mode="none"
+    read -p "请输入评估次数 (n_episode > 1): " n_episode
+    if ! [[ "$n_episode" =~ ^[0-9]+$ ]] || [ "$n_episode" -le 1 ]; then
+        echo "错误：评估次数必须为大于1的整数"
+        exit 1
+    fi
 else
-    # 询问用户使用什么渲染模式
-    echo "可用的渲染模式:"
-    echo "[0] human"
-    echo "[1] anim3d"
-    echo "[2] flightgear"
-    echo "[3] none"
-
-    read -p "请选择渲染模式 [0-3]: " mode_idx
-
-    case $mode_idx in
-        0)
-            render_mode="human"
-            ;;
-        1)
-            render_mode="anim3d"
-            ;;
-        2)
-            render_mode="flightgear"
-            ;;
-        3)
-            render_mode="none"
-            ;;
-        *)
-            echo "错误：无效的选择"
-            exit 1
-            ;;
-    esac
+    echo "错误：无效的选择"
+    exit 1
 fi
-
-echo "已选择渲染模式: $render_mode"
 echo ""
 
 opponent_pool_path_param=""
+selected_pool_path=""
+
 if [ "$is_goal_point_mode" -eq 0 ]; then
     # 选择对手池路径
     echo "选择对手池路径:"
     default_pool_dir="./opponent_pool"
+    pools=()
     if [ -d "$default_pool_dir" ]; then
         pools=($(ls -d "$default_pool_dir"/*/))
-        for i in "${!pools[@]}"; do
-            pool_name=$(basename "${pools[$i]}")
-            echo "[$i] $pool_name"
-        done
-        read -p "请选择对手池 [0-$((${#pools[@]}-1))]: " pool_idx
-
-        if [[ "$pool_idx" =~ ^[0-9]+$ ]] && [ "$pool_idx" -lt "${#pools[@]}" ]; then
-            selected_pool_path="${pools[$pool_idx]}"
-            echo "已选择对手池: $(basename "$selected_pool_path")"
-            opponent_pool_path_param="--pool_path $selected_pool_path"
-        else
-            echo "错误：无效的选择"
-            exit 1
-        fi
-    else
-        echo "警告: 未找到默认对手池目录 '$default_pool_dir'。"
-        read -p "请输入对手池路径: " selected_pool_path
-        if [ -d "$selected_pool_path" ]; then
-            opponent_pool_path_param="--pool_path $selected_pool_path"
-        else
-            echo "错误：路径 '$selected_pool_path' 不存在或不是一个目录。"
-            exit 1
-        fi
     fi
-    echo ""
-fi
+    
+    for i in "${!pools[@]}"; do
+        pool_name=$(basename "${pools[$i]}")
+        echo "[$i] $pool_name"
+    done
+    echo "[${#pools[@]}] 输入自定义路径"
 
-if [ "$is_goal_point_mode" -eq 1 ]; then
-    opponent_model_type=-1
-    echo "GoalPoint模式下，对手模型类型固定为随机输入"
-else
-    # 添加选择对手模型类型
-    echo "选择对手模型类型:"
-    echo "[-1] 随机输入"
-    echo "[0] 随机对手"
-    echo "[1+] 对手池中对应编号的对手"
-    read -p "请选择对手模型类型: " opponent_model_type
+    read -p "请选择对手池 [0-${#pools[@]}]: " pool_idx
 
-    # 验证输入
-    if ! [[ "$opponent_model_type" =~ ^-?[0-9]+$ ]]; then
+    if [ "$pool_idx" -eq "${#pools[@]}" ]; then
+        read -p "请输入对手池路径 (相对或绝对路径): " custom_path
+        # 处理相对路径
+        if [[ "$custom_path" != /* ]]; then
+            custom_path="$(pwd)/$custom_path"
+        fi
+        
+        if [ -d "$custom_path" ]; then
+            selected_pool_path="$custom_path"
+        else
+            echo "错误：路径 '$custom_path' 不存在或不是一个目录。"
+            exit 1
+        fi
+    elif [[ "$pool_idx" =~ ^[0-9]+$ ]] && [ "$pool_idx" -lt "${#pools[@]}" ]; then
+        selected_pool_path="${pools[$pool_idx]}"
+    else
         echo "错误：无效的选择"
         exit 1
     fi
+    
+    echo "已选择对手池: $(basename "$selected_pool_path")"
+    opponent_pool_path_param="--pool_path $selected_pool_path"
+    echo ""
 fi
 
-# 设置脚本参数
-if [ "$opponent_model_type" -eq -1 ]; then
-    echo "已选择随机输入作为对手"
-else
-    if [ "$opponent_model_type" -eq 0 ]; then
-        echo "已选择随机对手"
-    else
-        echo "已选择对手池中的对手 #$opponent_model_type"
+model_num_param=""
+if [ "$is_goal_point_mode" -eq 0 ]; then
+    # 如果是可视化模式，需要选择具体的对手模型
+    if [ "$run_mode_idx" -eq 0 ]; then
+        echo "选择对手模型:"
+        # 列出池中的模型文件夹
+        if [ -d "$selected_pool_path" ]; then
+            echo "对手池中的可用模型:"
+            ls -F "$selected_pool_path" | grep /$ | head -n 10
+            echo "..."
+        fi
+        read -p "请输入对手模型编号 (对应文件夹名): " opponent_model_num
+        model_num_param="--model_num $opponent_model_num"
+        echo "已选择对手模型: $opponent_model_num"
     fi
 fi
-model_num_param="--model_num $opponent_model_type"
 
 # 调用Python脚本进行评估
-echo "开始评估..."
-python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" $model_num_param $opponent_pool_path_param
+echo "开始运行..."
+python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" --n_episode "$n_episode" $model_num_param $opponent_pool_path_param

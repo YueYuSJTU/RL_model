@@ -1,6 +1,7 @@
 import os
 import torch
 import warnings
+import logging
 import numpy as np
 import multiprocessing as mp
 from gymnasium.spaces import Box
@@ -135,6 +136,10 @@ class NNVecEnv(SubprocVecEnv):
             return strategy_dirs
         
         # 检查根目录是否存在
+        if root_dir is None:
+            # 这里允许root_dir为空，表示不加载任何模型，本包装器仅起到更改obs维度的作用。用在evaluate场景
+            logging.warning("No pool_roots provided for opponent models.")
+            return strategy_dirs
         if not os.path.exists(root_dir):
             raise ValueError(f"Root directory {root_dir} does not exist")
         
@@ -174,23 +179,20 @@ class NNVecEnv(SubprocVecEnv):
 
         model_file = os.path.join(model_path, "best_model.zip")
         env_config = self._load_opponent_env_config(model_path)
-        env_file = os.path.join(model_path, "best_env.pkl") if os.path.exists(os.path.join(model_path, "best_env.pkl")) else os.path.join(model_path, "final_train_env.pkl")
+        # env_file = os.path.join(model_path, "best_env.pkl") if os.path.exists(os.path.join(model_path, "best_env.pkl")) else os.path.join(model_path, "final_train_env.pkl")
 
         if not os.path.exists(model_file):
             raise ValueError(f"Model file {model_file} does not exist.")
-        if not os.path.exists(env_file):
-            raise ValueError(f"VecNormalize file {env_file} does not exist.")
+        # if not os.path.exists(env_file):
+        #     raise ValueError(f"VecNormalize file {env_file} does not exist.")
     
-        # # 直接从pkl文件加载标准化参数
-        # with open(env_file, "rb") as f:
-        #     vec_env = pickle.load(f)
 
         # 这里设置model_num为-1，避免循环依赖
         vec_env = create_env(env_config, training=False, vec_env_kwargs={"model_num": -1})
-        vec_env = VecNormalize.load(
-            env_file, 
-            vec_env
-        )
+        # vec_env = VecNormalize.load(
+        #     env_file, 
+        #     vec_env
+        # )
         vec_env.training = False
         vec_env.norm_reward = False
 

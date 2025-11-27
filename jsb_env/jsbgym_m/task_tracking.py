@@ -478,7 +478,7 @@ class TrackingTask(FlightTask):
             else:
                 # 平局
                 win = 0
-            env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left]}
+            env_info = {"win": win, "steps_used": self.steps_left.max - sim[self.steps_left], "HP_self": sim[self.aircraft_HP], "HP_oppo": opponent_sim[self.aircraft_HP]}
         if self.debug:
             self._validate_state(state, terminated, truncated, self_action, reward)
         self._store_reward(reward, sim)
