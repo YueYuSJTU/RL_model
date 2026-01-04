@@ -268,7 +268,8 @@ class UnifiedTrainer:
 
                 # 3. Challenge the opponent pool
                 self.pool_manager.update_pool(new_model_path=cycle_path, n_episodes=n_episodes_eval)
-        
+                # 更新对手池后必须调用此方法以更新环境中的敌机模型
+                train_env.update_opponent_models()
         except KeyboardInterrupt:
             logger.warning("Battle training interrupted by user (Ctrl+C).")
         finally:

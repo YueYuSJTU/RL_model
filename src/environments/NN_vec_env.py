@@ -66,12 +66,17 @@ class NNVecEnv(SubprocVecEnv):
         super(SubprocVecEnv, self).__init__(n_envs, half_observation_space, half_action_space)
 
         self.model_num = model_num
-        self._choose_opponent_models(pool_roots, n_envs)
+        self.pool_roots = pool_roots
+        self.update_opponent_models()
         self.opponent_observation = None
 
-    def _choose_opponent_models(self, pool_roots: Union[str, List[str]], n_envs) -> None:
+    def update_opponent_models(self) -> None:
+        """
+        从对手池路径加载敌机策略并更新敌机模型列表
+        每次对手池更新后调用此方法
+        """
         # 选择敌机策略
-        self.opponent_model_roots = self._find_strategy_dirs(pool_roots)
+        self.opponent_model_roots = self._find_strategy_dirs(self.pool_roots)
         
         # 加载选择的敌机策略
         self.opponent_models = []
@@ -86,7 +91,7 @@ class NNVecEnv(SubprocVecEnv):
         
         # 为每个子环境分配一个随机的初始策略
         if len(self.opponent_models) > 0:
-            self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=n_envs)
+            self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=self.num_envs)
         
 
     def _get_space(self, observation_space: Box, action_space: Box) -> Tuple[Box, Box]:
@@ -283,6 +288,7 @@ class NNVecEnv(SubprocVecEnv):
     def reset(self) -> np.ndarray:
         """重置所有环境，并为每个环境随机选择新的敌机策略"""
         # 为每个环境随机选择新的策略
+        # 注意：因为self.opponent_models没有变化，所以这个操作无法更新敌机模型，必须要单独调用update_opponent_models()
         if self.model_num >= 0:
             self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=self.num_envs)
         
