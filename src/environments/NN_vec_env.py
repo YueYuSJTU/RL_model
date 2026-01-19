@@ -89,10 +89,51 @@ class NNVecEnv(SubprocVecEnv):
             self.opponent_models.append(wrapped_model)
             # self.opponent_envs.append(env)
         
+        # 初始化统计数据和权重
+        self.opponent_stats = {i: {'wins': 0, 'games': 0} for i in range(len(self.opponent_models))}
+        self.opponent_weights = np.ones(len(self.opponent_models)) * 9.0
+
         # 为每个子环境分配一个随机的初始策略
         if len(self.opponent_models) > 0:
-            self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=self.num_envs)
+            self._sample_strategies()
         
+
+    def _sample_strategies(self):
+        """根据权重采样策略索引"""
+        if len(self.opponent_models) == 0:
+            return
+            
+        # Normalize weights to probabilities
+        total_weight = np.sum(self.opponent_weights)
+        if total_weight > 0:
+            probs = self.opponent_weights / total_weight
+        else:
+            probs = np.ones(len(self.opponent_models)) / len(self.opponent_models)
+            
+        self.env_strategy_indices = np.random.choice(
+            len(self.opponent_models), 
+            size=self.num_envs, 
+            p=probs
+        )
+
+    def _update_strategy_weight(self, strategy_idx: int, won: bool):
+        """更新特定策略的统计数据和权重"""
+        stats = self.opponent_stats[strategy_idx]
+        stats['games'] += 1
+        if won:
+            stats['wins'] += 1
+            
+        # 只要成功就降低0.1的采样概率，只要没成功，就升高0.1的采样概率
+        # 权重范围保持在 [1.0, 9.0]
+        current_weight = self.opponent_weights[strategy_idx]
+        if won:
+            new_weight = current_weight - 0.1
+        else:
+            new_weight = current_weight + 0.1
+        
+        if new_weight < current_weight and new_weight >= 1.0:
+            print(f"Strategy {strategy_idx} weight updated from {current_weight} to {new_weight}")
+        self.opponent_weights[strategy_idx] = np.clip(new_weight, 1.0, 9.0)
 
     def _get_space(self, observation_space: Box, action_space: Box) -> Tuple[Box, Box]:
         """
@@ -282,6 +323,16 @@ class NNVecEnv(SubprocVecEnv):
             done_indices = np.where(done)[0]
             for idx in done_indices:
                 info[idx]["terminal_observation"] = agent_obs[idx]
+                
+                # 更新对手权重
+                if self.model_num >= 0 and len(self.opponent_models) > 0:
+                    # 判断胜负: 优先检查 info 中的 'result' 或 'win'
+                    # 取消 reward > 0 视为成功的判定
+                    is_win = False
+                    is_win = info[idx]["env_info"]['win'] == 1
+                        
+                    strategy_idx = self.env_strategy_indices[idx]
+                    self._update_strategy_weight(strategy_idx, is_win)
         
         return agent_obs, reward, done, info
 
@@ -290,7 +341,7 @@ class NNVecEnv(SubprocVecEnv):
         # 为每个环境随机选择新的策略
         # 注意：因为self.opponent_models没有变化，所以这个操作无法更新敌机模型，必须要单独调用update_opponent_models()
         if self.model_num >= 0:
-            self.env_strategy_indices = np.random.randint(len(self.opponent_models), size=self.num_envs)
+            self._sample_strategies()
         
         raw_observation = super().reset()
         self.opponent_observation = self._get_observation(raw_observation, "opponent").copy()

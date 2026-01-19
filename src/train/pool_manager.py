@@ -23,7 +23,7 @@ class PoolManager:
     
     def __init__(self, pool_path: str, max_pool_size: int = 10, 
                  score_weights: Dict[str, float] = None,
-                 whitelist: List[str] = ["1"]):
+                 whitelist: List[str] = ["1", "2", "3", "4", "5", "6", "7"]):
         """
         初始化 PoolManager.
 
