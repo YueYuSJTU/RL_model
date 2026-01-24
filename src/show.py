@@ -13,6 +13,7 @@ import torch
 import gc
 from tqdm import tqdm
 from .agents.model_wrapper import ObsAdaptingModel
+from src.utils.manual_control import KeyboardController, GamepadController
 
 # def show(exp_path: str, render_mode: str = "human", random_input: bool = False, model_num: int = 0, pool_path: str = None) -> None:
 #     # 加载实验配置
@@ -58,7 +59,7 @@ from .agents.model_wrapper import ObsAdaptingModel
 #             break
 #     vec_env.close()
 
-def show(exp_path: str, render_mode: str = "human", model_num: int = 0, pool_path: str = None) -> None:
+def show(exp_path: str, render_mode: str = "human", model_num: int = 0, pool_path: str = None, manual_control: bool = False) -> None:
     model1_path = exp_path
     model2_path = os.path.join(pool_path, str(model_num))
     results = evaluate_without_NN(
@@ -66,6 +67,7 @@ def show(exp_path: str, render_mode: str = "human", model_num: int = 0, pool_pat
         model2_path=model2_path,
         n_episodes=1,
         render_mode=render_mode,
+        manual_control=manual_control,
     )
     win_rate = results["win_rate"]
     draw_rate = results["draw_rate"]
@@ -86,7 +88,8 @@ def evaluate_without_NN(
         n_episodes: int = 1, 
         render_mode: str = None, 
         env_cfg: Dict = None, 
-        use_tqdm: bool = True
+        use_tqdm: bool = True,
+        manual_control: bool = False,
     ) -> Tuple[float, float, float, float, float, float]:
     """
     评估两个模型在对战环境中的表现，不经过NN包装器，直接调用原始环境。
@@ -126,15 +129,44 @@ def evaluate_without_NN(
     # 由于模型obs维度不匹配，必须创建两个虚假的使用NN包装器的环境用以加载模型
 
     # 加载模型
-    agent1_cfg = load_config(os.path.join(model1_path, "agent_config.yaml"))
-    env1_cfg = load_config(os.path.join(model1_path, "env_config.yaml"))        # 这里需要加载环境配置以适配ObsAdaptingModel，它包含了帧堆叠包装器和环境obs维度等信息
-    fake_env1 = create_env(env1_cfg, training=False, vec_env_kwargs=None)
-    model1 = PPO.load(
-        os.path.join(model1_path, "best_model"),
-        env=fake_env1,
-        device=agent1_cfg["device"]
-    )
-    model1 = ObsAdaptingModel(model1, env1_cfg)
+
+    if manual_control:
+        logging.info("Initializing Keyboard Control for Agent 1...")
+        # # 实例化键盘控制器
+        # keyboard_agent = KeyboardController(action_dim=4)
+        # model1 = None
+        try:
+            # 优先尝试连接手柄
+            manual_agent = GamepadController(action_dim=4)
+            logging.info(">>> Using GAMEPAD Control <<<")
+            logging.info("Controls: Left Stick=Pitch/Roll, RB/LB=Yaw, A/B=Throttle")
+            model1 = None
+        except Exception as e:
+            # 手柄连接失败，回退到键盘
+            logging.warning(f"Gamepad initialization failed: {e}")
+            logging.info(">>> Falling back to KEYBOARD Control <<<")
+            manual_agent = KeyboardController(action_dim=4)
+            model1 = None
+    else:
+        # 只有在非手动模式下才加载模型1
+        agent1_cfg = load_config(os.path.join(model1_path, "agent_config.yaml"))
+        env1_cfg = load_config(os.path.join(model1_path, "env_config.yaml"))
+        fake_env1 = create_env(env1_cfg, training=False, vec_env_kwargs=None)
+        model1 = PPO.load(
+            os.path.join(model1_path, "best_model"),
+            env=fake_env1,
+            device=agent1_cfg["device"]
+        )
+        model1 = ObsAdaptingModel(model1, env1_cfg)
+    # agent1_cfg = load_config(os.path.join(model1_path, "agent_config.yaml"))
+    # env1_cfg = load_config(os.path.join(model1_path, "env_config.yaml"))        # 这里需要加载环境配置以适配ObsAdaptingModel，它包含了帧堆叠包装器和环境obs维度等信息
+    # fake_env1 = create_env(env1_cfg, training=False, vec_env_kwargs=None)
+    # model1 = PPO.load(
+    #     os.path.join(model1_path, "best_model"),
+    #     env=fake_env1,
+    #     device=agent1_cfg["device"]
+    # )
+    # model1 = ObsAdaptingModel(model1, env1_cfg)
     agent2_cfg = load_config(os.path.join(model2_path, "agent_config.yaml"))
     env2_cfg = load_config(os.path.join(model2_path, "env_config.yaml"))        # 这里需要加载环境配置以适配ObsAdaptingModel，它包含了帧堆叠包装器和环境obs维度等信息
     fake_env2 = create_env(env2_cfg, training=False, vec_env_kwargs=None)
@@ -170,7 +202,16 @@ def evaluate_without_NN(
             while not episode_done:
                 if render_mode is not None:
                     vec_env.render()
-                action1, _ = model1.predict(obs[:, :obs_length//2], deterministic=True)
+                # action1, _ = model1.predict(obs[:, :obs_length//2], deterministic=True)
+                if manual_control:
+                    # 从键盘代理获取动作，不需要观测值，但为了接口统一可以传 None
+                    action1, _ = manual_agent.predict(None)
+                    
+                    # 你的原始代码中对最后一维取绝对值，这里保留该逻辑以防环境报错
+                    # 如果键盘控制的油门允许负数（刹车），根据环境需要保留或删除下行
+                    action1[:, -1] = np.abs(action1[:, -1]) 
+                else:
+                    action1, _ = model1.predict(obs[:, :obs_length//2], deterministic=True)
                 action2, _ = model2.predict(obs[:, obs_length//2:], deterministic=True)
                 # action1和action2需要合并成一个动作输入
                 combined_action = np.concatenate([action1, action2], axis=-1)
@@ -210,6 +251,8 @@ def evaluate_without_NN(
         # === [关键] 显式清理代码 ===
         if 'vec_env' in locals() and vec_env is not None:
             vec_env.close()
+        if 'manual_agent' in locals() and manual_agent is not None:
+            manual_agent.close()
         if 'model1' in locals():
             del model1
         if 'model2' in locals():
@@ -344,11 +387,13 @@ if __name__ == "__main__":
     parser.add_argument("--pool_path", type=str, default=None, help="Path to the opponent pool directory.")
     parser.add_argument("--model_num", type=int, default=0, help="Model number for multi-agent environments")
     parser.add_argument("--n_episode", type=int, default=1, help="Number of episodes for evaluation.")
+    parser.add_argument("--manual", action="store_true", help="Enable keyboard manual control for agent 1.")
+
     args = parser.parse_args()
     if args.render_mode == "none" or args.render_mode == "None":
         args.render_mode = None
     if args.n_episode <= 1:
-        show(args.exp_path, args.render_mode, model_num=args.model_num, pool_path=args.pool_path)
+        show(args.exp_path, args.render_mode, model_num=args.model_num, pool_path=args.pool_path, manual_control=args.manual)
     else:
         if args.pool_path is None:
             raise ValueError("pool_path is required when n_episode > 1.")
