@@ -168,10 +168,13 @@ echo "========================================================"
 **运行方式:**
 
 ```bash
-./evalate.sh
+./show.sh
 ```
+根据提示选定要评估的实验编号后，选择“定量评估”选项即可
 
 ### 4.2 goal point模型评估
+
+> goal point 模型是在对战模型开始训练时，为了增强敌机稳定性和丰富性而设计的对手，它由另一套pipeline专门训练，主要能力是向目标点飞行。在正式训练时，仅使用它的模型权重文件作为对手使用
 ```bash
 python ./test/evaluate_goal_point.py --n_episodes 1000 --exp_path "experiments/goal_point/20250922_095754/stage1/20250923_203916_GoalPointTask_ppo_1layer"
 ```
@@ -192,3 +195,5 @@ python ./test/evaluate_goal_point.py --n_episodes 1000 --exp_path "experiments/g
 ```bash
 ./show.sh
 ```
+根据提示选定要评估的实验编号后，选择“可视化”选项即可
+> 要运行人机对战，添加--manual参数即可，支持手柄和键盘控制。手柄键位不对可以使用src/utils/test_joystick_id.py找到键位后，修改src/utils/manual_control.py文件

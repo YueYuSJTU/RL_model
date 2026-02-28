@@ -149,8 +149,21 @@ class GamepadController:
         # Axis 4/5: 左右扳机 (Throttle) (LT/RT)
         
         # 1. Roll (滚转) - 左摇杆横向
-        roll = self._apply_deadzone(self.joystick.get_axis(0))
+
+        # # Plan A
+        # roll = self._apply_deadzone(self.joystick.get_axis(0))
+
+        # # Plan B : roll过于灵敏，所以使用axis2和5（对应左右扳机）来控制滚转
+        # axis2 = self.joystick.get_axis(2)  # 向左滚转
+        # axis5 = self.joystick.get_axis(5)  # 向右滚转
+        # roll = self._apply_deadzone(axis5 - axis2)
         
+        # Plan C : 默认0.5倍控制，如果长按X可以切换到1.0倍控制
+        roll = 0.5 * self._apply_deadzone(self.joystick.get_axis(0))
+        if self.joystick.get_numbuttons() > 2:
+            if self.joystick.get_button(2): # X键
+                roll = self._apply_deadzone(self.joystick.get_axis(0))
+                
         # 2. Pitch (俯仰) - 左摇杆纵向
         # 通常环境定义: 1.0 是拉起机头(Pitch Up)。
         # 手柄物理: 拉杆(Down方向)是 +1。所以通常不需要取反，直接对应。
