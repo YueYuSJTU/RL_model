@@ -1,5 +1,5 @@
 import json
-import socket_lib
+from . import socket_lib
 
 
 def connect(_host, _port):

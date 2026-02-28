@@ -78,8 +78,8 @@ class Enhanced3DVisualiser(object):
         """加载 F-16 3D 模型数据"""
         try:
             possible_paths = [
-                '/home/ubuntu/Workfile/RL/RL_model/src/multiAgent/aerobench/visualize/f-16.mat',
-                os.path.join(os.path.dirname(__file__), '../../src/multiAgent/aerobench/visualize/f-16.mat'),
+                '/home/ubuntu/Workfile/RL/RL_model/archive/aerobench/visualize/f-16.mat',
+                os.path.join(os.path.dirname(__file__), '../../archive/aerobench/visualize/f-16.mat'),
                 os.path.join(os.path.dirname(__file__), 'f-16.mat'),
                 'f-16.mat'
             ]

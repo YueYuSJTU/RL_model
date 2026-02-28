@@ -7,10 +7,10 @@ import numpy as np
 
 # 导入 dogfight_client
 try:
-    import dogfight_client as df
+    from src.visualization import dogfight_client as df
 except ImportError:
     sys.path.append("./src")
-    import dogfight_client as df
+    from visualization import dogfight_client as df
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 

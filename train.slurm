@@ -41,7 +41,7 @@ conda activate js_gpu
 echo "Virtual environment activated."
 
 # --- 2. 运行您的Python训练脚本 ---
-python -u -m src.train.battle_train --config "configs/battle_train_config.yaml" --pool_path "opponent_pool/pool4"
+python -u -m src.training.train --config "configs/battle_train_config.yaml" --pool_path "opponent_pool/pool4"
 
 echo "========================================================"
 echo "Job finished at: $(date)"

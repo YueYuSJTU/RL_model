@@ -108,9 +108,9 @@ echo "Conda environment 'js_gpu' activated."
 
 # --- 2. 运行您的Python训练脚本 ---
 # !!! 重要: 请在此处修改为您本次实验的真实参数 !!!
-python -u -m src.stageTrain \
+python -u -m src.training.train \
     --config "configs/stage_train_config.yaml" \
-    --eval_pool "/path/to/your/opponent_pool/pool3"
+    --pool_path "/path/to/your/opponent_pool/pool3"
 
 echo "========================================================"
 echo "Job finished at: $(date)"

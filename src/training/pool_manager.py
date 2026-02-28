@@ -3,8 +3,7 @@ import shutil
 import numpy as np
 import logging
 from typing import Dict, List
-from src.evaluate_pool import evaluate_versus
-from src.show import evaluate_without_NN
+from src.evaluation.evaluator import Evaluator
 
 
 # 设置日志记录
@@ -139,14 +138,7 @@ class PoolManager:
             opponent_num = int(opponent_name)
             logging.info(f"对战开始: 新模型 vs. 对手 '{opponent_name}'")
             
-            # win_rate, draw_rate, loss_rate, opponent_fall_rate, _, _ = evaluate_versus(
-            #     model_path=new_model_path,
-            #     pool_path=self.pool_path,
-            #     opponent_num=opponent_num,
-            #     n_episodes=n_episodes,
-            #     use_tqdm=False
-            # )
-            results = evaluate_without_NN(
+            results = Evaluator.run_match(
                 model1_path=new_model_path,
                 model2_path=os.path.join(self.pool_path, opponent_name),
                 n_episodes=n_episodes,

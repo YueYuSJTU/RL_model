@@ -9,7 +9,7 @@
 
 **主要工作流**:
 1. 配置 conda 环境 (`environment.yml`)
-2. 通过 `python -m src.stageTrain ...` (多阶段) 或 `python -m src.train.battle_train ...` (带有对手池的对战/自博弈风格) 进行训练
+2. 通过 `python -m src.training.train ...` 进行训练 (支持多阶段和带有对手池的对战/自博弈风格)
 3. 通过 `./show.sh` 进行评估 / 可视化 (它是 `python -m src.show ...` 的包装器)
 
 # 环境 / 依赖
@@ -25,27 +25,18 @@
 # 常用命令
 
 
-## 多阶段训练 (推荐入口)
+## 统一训练入口 (支持多阶段和对战)
 
-使用 `src/stageTrain.py` (README 中引用的模块入口点):
+使用 `src/training/train.py`:
 ```bash
-python -m src.stageTrain \
+python -m src.training.train \
 --config "configs/stage_train_config.yaml" \
---eval_pool "/path/to/opponent_pool/pool3" \
+--pool_path "/path/to/opponent_pool/pool3" \
 --pretrained_path "experiments/20250921_162658"
 ```
 - 省略 `--pretrained_path` 以开始新运行 (创建 `experiments/YYYYMMDD_HHMMSS/`)。
 - 提供 `--pretrained_path` 以恢复/微调 (该根目录下的阶段目录)。
-
-## 对战训练模式 (后台运行)
-
-包装器入口点: `src/train/battle_train.py` (根据 README)
-```bash
-nohup python -m src.train.battle_train \
---config "configs/battle_train_config.yaml" \
---pool_path "/path/to/opponent_pool/pool4" \
-> output.log 2>&1 &
-```
+- 如果配置中包含 `battle_step`，则最后一个阶段将作为对战阶段运行。
 
 ## 展示 / 评估 (交互式助手)
 
@@ -65,18 +56,12 @@ nohup python -m src.train.battle_train \
 ## 训练流水线 (SB3 PPO)
 
 **主要部分**:
-- `src/stageTrain.py`: 编排多阶段训练。
-    - 读取描述阶段的 YAML 配置 (例如 `configs/stage_train_config.yaml`)。
-    - 为每个阶段加载:
-        - 环境配置: `configs/env/*.yaml`
-        - 智能体配置: `configs/agent/*.yaml`
-        - 阶段/训练设置: 阶段 cfg (时间步, 评估频率, CPU 数量等)
-    - 创建 `experiments/<timestamp>/stageN/<timestamp>_<env>_<agent>/` 文件夹并快照配置 YAML。
-- `src/train/battle_train.py`: 带有最终“对战”阶段的统一阶段训练器。
+- `src/training/train.py`: 统一的训练入口，支持多阶段和对战训练。
     - 实现 `UnifiedTrainer`:
-        - 普通阶段: 顺序训练，将最佳模型带入下一阶段
-        - 对战阶段: 分块循环训练 (`battle_step`)，通过 `PoolManager` 定期更新对手池
-- `src/train/pool_manager.py`: 管理磁盘上的对手池并更新选择 (用于对战阶段)。
+        - 读取描述阶段的 YAML 配置。
+        - 普通阶段: 顺序训练，将最佳模型带入下一阶段。
+        - 对战阶段: 分块循环训练 (`battle_step`)，通过 `PoolManager` 定期更新对手池。
+- `src/training/pool_manager.py`: 管理磁盘上的对手池并更新选择 (用于对战阶段)。
 - `src/environments/make_env.py`: 训练器使用的 `create_env(...)` 工厂，构建 Gymnasium 环境和矢量化环境。
 - `src/agents/make_agent.py`: 创建/加载 SB3 智能体和策略 kwargs (支持 `src/agents/` 下的 GRU/transformer 变体)。
 - `src/utils/custom_callback.py`: 包含训练期间使用的回调，包括:
@@ -114,10 +99,12 @@ nohup python -m src.train.battle_train \
 
 - 当更改奖励塑形或终止条件时，规范位置在 `jsb_env/jsbgym_m/task_tracking.py` 下 (README 明确引用了这一点)。
 - 对于对手池 / 自博弈动态，请检查:
-    - `src/train/pool_manager.py`
+    - `src/training/pool_manager.py`
     - `src/utils/custom_callback.py` 中的回调
     - `DoubleJsbSimEnv.update_opponent_models()` (在对战循环中更新池后调用)
 - 对于手动控制行为和按键映射:
-    - `src/utils/test_joystick_id.py`
+    - `tests/test_joystick_id.py`
     - `src/utils/manual_control.py`
 
+
+这是我编写的双飞机空战项目，它零零散散更新了许多功能，目前有些臃肿和杂乱。我想请你帮我整理这个项目。由于项目过于庞大和散乱，我希望进入规划模式，首先明确我的需求后，再进行整理。  

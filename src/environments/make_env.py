@@ -4,23 +4,17 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocV
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.env_util import make_vec_env
 from src.utils.yaml_import import import_class
-from src.environments.NN_vec_env import NNVecEnv
+from src.environments.self_play_wrapper import SelfPlayWrapper
 from src.environments.wrap_env import create_wrapper_from_config
 import os
 import sys
-# # 将项目根目录添加到sys.path（使用相对路径）
-# current_file_path = os.path.abspath(__file__)
-# RL_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file_path))))  # RL目录
-# env_dir = os.path.join(RL_dir, "jsbgym")
-# # print(env_dir)
-# sys.path.append(env_dir)
 import jsb_env.jsbgym_m             # type: ignore
 
 def create_env(
-        env_config: dict, 
-        num_cpu: int = 1, 
+        env_config: dict,
+        num_cpu: int = 1,
         training: bool = True,
-        vec_env_cls: Callable = NNVecEnv,
+        vec_env_cls: Callable = SubprocVecEnv,
         vec_env_kwargs: Optional[dict[str, Any]] = None,
     ) -> DummyVecEnv:
     """创建标准化环境"""
@@ -36,26 +30,30 @@ def create_env(
     if render_mode == "flightgear":
         env_id = f"{plane}-{task}-{shape}-FG-v0"
     
+    # Create a wrapper class that includes SelfPlayWrapper
+    def make_wrapper(env):
+        if combined_wrapper_class is not None:
+            env = combined_wrapper_class(env)
+
+        pool_roots = vec_env_kwargs.get("pool_roots") if vec_env_kwargs else None
+        model_num = vec_env_kwargs.get("model_num", 0) if vec_env_kwargs else 0
+
+        return SelfPlayWrapper(env, pool_roots=pool_roots, model_num=model_num)
+
     if training:
-        # 创建训练环境
-        # vec_env = SubprocVecEnv([make_Env(env_id, i, wrappers=wrappers) for i in range(num_cpu)])
         vec_env = make_vec_env(
-            env_id, 
-            n_envs=num_cpu, 
-            wrapper_class=combined_wrapper_class,
-            vec_env_cls=vec_env_cls, 
-            vec_env_kwargs=vec_env_kwargs,
+            env_id,
+            n_envs=num_cpu,
+            wrapper_class=make_wrapper,
+            vec_env_cls=vec_env_cls,
             env_kwargs={"render_mode": render_mode}
         )
     else:
-        # 创建评估环境
-        # vec_env = DummyVecEnv([make_Env(env_id, 0, render_mode=render_mode, wrappers=wrappers)])
         vec_env = make_vec_env(
-            env_id, 
-            n_envs=1, 
-            wrapper_class=combined_wrapper_class,
+            env_id,
+            n_envs=1,
+            wrapper_class=make_wrapper,
             vec_env_cls=vec_env_cls,
-            vec_env_kwargs=vec_env_kwargs,
             env_kwargs={"render_mode": render_mode}
         )
 
@@ -88,6 +86,8 @@ def make_Env(env_id: str, rank: int, seed: int = 0, render_mode= None, wrappers:
                 wrapper = import_class(item["name"])
                 kwargs = item["kwargs"]
                 env = wrapper(env, **kwargs)
+        # Add SelfPlayWrapper if needed
+        # env = SelfPlayWrapper(env, pool_roots=pool_roots, model_num=model_num)
         env.reset(seed=seed + rank)
         return env
     # set_random_seed(seed)
