@@ -7,15 +7,6 @@ use_vec_normalize: False
 norm_obs: False
 norm_reward: False
 clip_obs: 10.0
-obs_config:
-  base: true
-  tracking: true
-  extra: False
-  oppo: False
-  action: true
-  exclude:
-    - "target/bearing-pointMass"
-    - "target/elevation-pointMass"
 
 # wrappers:
 #   - name: "src.environments.ContinueWrapper:ContinueObservation"

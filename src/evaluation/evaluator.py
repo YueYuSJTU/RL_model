@@ -45,7 +45,7 @@ class Evaluator:
 
         env_cfg["render_mode"] = render_mode
         env_cfg["use_vec_normalize"] = False
-        vec_env = create_env(env_cfg, training=False, vec_env_cls=DummyVecEnv, vec_env_kwargs={"use_self_play_wrapper": False})
+        vec_env = create_env(env_cfg, training=False, vec_env_cls=DummyVecEnv)
         vec_env.training = False
         vec_env.norm_reward = False
         vec_env.env_method("update_task_parameters", goal_point_prob=0.0)

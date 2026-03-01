@@ -4,7 +4,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocV
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.env_util import make_vec_env
 from src.utils.yaml_import import import_class
-from src.environments.self_play_wrapper import SelfPlayWrapper
+from src.environments.NN_vec_env import NNVecEnv
 from src.environments.wrap_env import create_wrapper_from_config
 import os
 import sys
@@ -14,7 +14,7 @@ def create_env(
         env_config: dict,
         num_cpu: int = 1,
         training: bool = True,
-        vec_env_cls: Callable = SubprocVecEnv,
+        vec_env_cls: Callable = NNVecEnv,
         vec_env_kwargs: Optional[dict[str, Any]] = None,
     ) -> DummyVecEnv:
     """创建标准化环境"""
@@ -26,25 +26,10 @@ def create_env(
     obs_config = env_config.get("obs_config")
     wrapper_configs = env_config.get("wrappers") if "wrappers" in env_config else None
     combined_wrapper_class = create_wrapper_from_config(wrapper_configs)
-    
+
     env_id = f"{plane}-{task}-{shape}-NoFG-v0"
     if render_mode == "flightgear":
         env_id = f"{plane}-{task}-{shape}-FG-v0"
-    
-    # Create a wrapper class that includes SelfPlayWrapper
-    def make_wrapper(env):
-        if combined_wrapper_class is not None:
-            env = combined_wrapper_class(env)
-
-        use_self_play = True
-        if vec_env_kwargs is not None and not vec_env_kwargs.get("use_self_play_wrapper", True):
-            use_self_play = False
-
-        if use_self_play:
-            pool_roots = vec_env_kwargs.get("pool_roots") if vec_env_kwargs else None
-            model_num = vec_env_kwargs.get("model_num", 0) if vec_env_kwargs else 0
-            return SelfPlayWrapper(env, pool_roots=pool_roots, model_num=model_num)
-        return env
 
     env_kwargs = {"render_mode": render_mode}
     if obs_config is not None:
@@ -54,16 +39,18 @@ def create_env(
         vec_env = make_vec_env(
             env_id,
             n_envs=num_cpu,
-            wrapper_class=make_wrapper,
+            wrapper_class=combined_wrapper_class,
             vec_env_cls=vec_env_cls,
+            vec_env_kwargs=vec_env_kwargs,
             env_kwargs=env_kwargs
         )
     else:
         vec_env = make_vec_env(
             env_id,
             n_envs=1,
-            wrapper_class=make_wrapper,
+            wrapper_class=combined_wrapper_class,
             vec_env_cls=vec_env_cls,
+            vec_env_kwargs=vec_env_kwargs,
             env_kwargs=env_kwargs
         )
 

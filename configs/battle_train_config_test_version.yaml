@@ -2,7 +2,7 @@
 stage1:
   agent: ppo_1layer
   env: f16_tracking_stage1
-  total_timesteps: 300_000 # Train for a fixed number of steps
+  total_timesteps: 100_000 # Train for a fixed number of steps
   eval_freq: 1000
   log_root: "./experiments"
   seed: 42

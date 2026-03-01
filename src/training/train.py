@@ -27,7 +27,7 @@ class UnifiedTrainer:
     Orchestrates a multi-stage training process, including standard stages and a final "battle training"
     stage that interacts with an opponent pool.
     """
-    def __init__(self, config_path: str, pool_path: str, pretrained_path: str = ""):
+    def __init__(self, config_path: str, pool_path: str, pretrained_path: str = "", debug_mode: bool = False):
         """
         Initializes the UnifiedTrainer.
 
@@ -37,12 +37,14 @@ class UnifiedTrainer:
             pretrained_path (str, optional):
                 Path to a root training directory (e.g., experiments/20250928_...) to resume a run.
                 If empty, a new training run will be started.
+            debug_mode (bool): If True, limits training to 2 battle cycles for testing.
         """
         with open(config_path, encoding="utf-8") as f:
             self.full_config = yaml.safe_load(f)
 
         self.pool_path = pool_path
         self.pretrained_path = pretrained_path
+        self.debug_mode = debug_mode
         self.stage_keys = sorted(self.full_config.keys())
 
         self.model = None
@@ -307,6 +309,10 @@ class UnifiedTrainer:
                 # 4. Challenge the opponent pool
                 self.pool_manager.update_pool(new_model_path=cycle_path, n_episodes=n_episodes_eval)
                 train_env.update_opponent_models()
+
+                if self.debug_mode and completed_cycles >= 2:
+                    logger.info("Debug mode: Reached 2 battle cycles. Terminating training.")
+                    break
         except KeyboardInterrupt:
             logger.warning("Battle training interrupted by user (Ctrl+C).")
         finally:
@@ -321,12 +327,14 @@ if __name__ == "__main__":
     parser.add_argument("--pool_path", type=str, required=True, help="Path to the opponent pool directory.")
     parser.add_argument("--pretrained_path", type=str, default="",
                         help="Path to a root training directory (e.g., experiments/20250928_...) to resume a run.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode (terminates after 2 battle cycles).")
 
     args = parser.parse_args()
 
     trainer = UnifiedTrainer(
         config_path=args.config,
         pool_path=args.pool_path,
-        pretrained_path=args.pretrained_path
+        pretrained_path=args.pretrained_path,
+        debug_mode=args.debug
     )
     trainer.run()
