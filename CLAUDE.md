@@ -106,5 +106,3 @@ python -m src.training.train \
     - `tests/test_joystick_id.py`
     - `src/utils/manual_control.py`
 
-
-这是我编写的双飞机空战项目，它零零散散更新了许多功能，目前有些臃肿和杂乱。我想请你帮我整理这个项目。由于项目过于庞大和散乱，我希望进入规划模式，首先明确我的需求后，再进行整理。  

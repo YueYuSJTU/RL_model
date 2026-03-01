@@ -23,6 +23,7 @@ def create_env(
     task = env_config["task"]
     shape = env_config["shape"]
     render_mode = env_config.get("render_mode")
+    obs_config = env_config.get("obs_config")
     wrapper_configs = env_config.get("wrappers") if "wrappers" in env_config else None
     combined_wrapper_class = create_wrapper_from_config(wrapper_configs)
     
@@ -45,13 +46,17 @@ def create_env(
             return SelfPlayWrapper(env, pool_roots=pool_roots, model_num=model_num)
         return env
 
+    env_kwargs = {"render_mode": render_mode}
+    if obs_config is not None:
+        env_kwargs["obs_config"] = obs_config
+
     if training:
         vec_env = make_vec_env(
             env_id,
             n_envs=num_cpu,
             wrapper_class=make_wrapper,
             vec_env_cls=vec_env_cls,
-            env_kwargs={"render_mode": render_mode}
+            env_kwargs=env_kwargs
         )
     else:
         vec_env = make_vec_env(
@@ -59,7 +64,7 @@ def create_env(
             n_envs=1,
             wrapper_class=make_wrapper,
             vec_env_cls=vec_env_cls,
-            env_kwargs={"render_mode": render_mode}
+            env_kwargs=env_kwargs
         )
 
     # 标准化处理

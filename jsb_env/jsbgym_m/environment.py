@@ -38,6 +38,7 @@ class JsbSimEnv(gym.Env):
         agent_interaction_freq: int = 10,
         shaping: Shaping = Shaping.STANDARD,
         render_mode: Optional[str] = None,
+        obs_config: Optional[dict] = None,
     ):
         """
         Constructor. Inits some internal state, but JsbSimEnv.reset() must be
@@ -59,7 +60,14 @@ class JsbSimEnv(gym.Env):
         self.sim: Simulation = None
         self.sim_steps_per_agent_step: int = self.JSBSIM_DT_HZ // agent_interaction_freq
         self.aircraft = aircraft
-        self.task = task_type(shaping, agent_interaction_freq, aircraft)
+
+        # Pass obs_config to task if it accepts it
+        import inspect
+        task_init_params = inspect.signature(task_type.__init__).parameters
+        if "obs_config" in task_init_params:
+            self.task = task_type(shaping, agent_interaction_freq, aircraft, obs_config=obs_config)
+        else:
+            self.task = task_type(shaping, agent_interaction_freq, aircraft)
         # set Space objects
         self.observation_space: gym.spaces.Box = self.task.get_state_space()
         self.action_space: gym.spaces.Box = self.task.get_action_space()
@@ -290,6 +298,7 @@ class DoubleJsbSimEnv(JsbSimEnv):
         shaping: Shaping = Shaping.STANDARD,
         render_mode: Optional[str] = None,
         opponent_aircraft: Aircraft = f16,
+        obs_config: Optional[dict] = None,
     ):
         if not issubclass(task_type, TrackingTask):
             raise ValueError(
@@ -301,6 +310,7 @@ class DoubleJsbSimEnv(JsbSimEnv):
             agent_interaction_freq=agent_interaction_freq,
             shaping=shaping,
             render_mode=render_mode,
+            obs_config=obs_config,
         )
         # 新增对手飞机参数
         self.opponent_aircraft = opponent_aircraft

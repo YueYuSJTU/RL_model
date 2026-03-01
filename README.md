@@ -69,8 +69,8 @@
 
 ```bash
 python -m src.training.train \
-    --config "configs/stage_train_config.yaml" \
-    --pool_path "/path/to/opponent_pool/pool3" \
+    --config "configs/battle_train_config.yaml" \
+    --pool_path "/path/to/opponent_pool/pool4" \
     --pretrained_path "experiments/20250921_162658"
 ```
 

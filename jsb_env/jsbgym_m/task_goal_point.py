@@ -45,6 +45,7 @@ class GoalPointTask(TrackingTask):
         positive_rewards: bool = True,
         goal_point_mode: str = 'random',  # 'static', 'dynamic', 'random_dynamic', 'spiral', or 'random'
         random_init: bool = True,
+        obs_config: Optional[dict] = None,
     ):
         """
         Constructor.
@@ -66,19 +67,39 @@ class GoalPointTask(TrackingTask):
             # adverse_angle_rad,
             self.closure_rate,
         )
-        self.state_variables = (
-            FlightTask.base_state_variables
-            + self.tracking_state_variables
-            + self.extra_state_variables
-            # + self.oppo_state_variables
-            + self.action_variables
-        )
+        if obs_config is not None:
+            self.state_variables = []
+            if obs_config.get("base", True):
+                self.state_variables.extend(FlightTask.base_state_variables)
+            if obs_config.get("tracking", True):
+                self.state_variables.extend(self.tracking_state_variables)
+            if obs_config.get("extra", True):
+                self.state_variables.extend(self.extra_state_variables)
+            if obs_config.get("oppo", False): # Default false for goal point
+                self.state_variables.extend(self.oppo_state_variables)
+            if obs_config.get("action", True):
+                self.state_variables.extend(self.action_variables)
+
+            exclude_list = obs_config.get("exclude", [])
+            if exclude_list:
+                self.state_variables = [prop for prop in self.state_variables if prop.name not in exclude_list]
+
+            self.state_variables = tuple(self.state_variables)
+        else:
+            self.state_variables = (
+                FlightTask.base_state_variables
+                + self.tracking_state_variables
+                + self.extra_state_variables
+                # + self.oppo_state_variables
+                + self.action_variables
+            )
         super().__init__(
             shaping_type=shaping_type,
             step_frequency_hz=step_frequency_hz,
             aircraft=aircraft,
             episode_time_s=episode_time_s,
             positive_rewards=positive_rewards,
+            obs_config=obs_config,
         )
         self.opponent = self._create_opponent(model="goal_point")
         self.goal_point_mode = goal_point_mode

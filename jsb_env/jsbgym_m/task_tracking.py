@@ -219,6 +219,7 @@ class TrackingTask(FlightTask):
         aircraft: Aircraft,
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
+        obs_config: Optional[dict] = None,
     ):
         """
         Constructor.
@@ -234,13 +235,32 @@ class TrackingTask(FlightTask):
         )
         self.aircraft = aircraft
         if not hasattr(self, 'state_variables'):
-            self.state_variables = (
-                FlightTask.base_state_variables
-                + self.tracking_state_variables
-                + self.extra_state_variables
-                + self.oppo_state_variables
-                + self.action_variables
-            )
+            if obs_config is not None:
+                self.state_variables = []
+                if obs_config.get("base", True):
+                    self.state_variables.extend(FlightTask.base_state_variables)
+                if obs_config.get("tracking", True):
+                    self.state_variables.extend(self.tracking_state_variables)
+                if obs_config.get("extra", True):
+                    self.state_variables.extend(self.extra_state_variables)
+                if obs_config.get("oppo", True):
+                    self.state_variables.extend(self.oppo_state_variables)
+                if obs_config.get("action", True):
+                    self.state_variables.extend(self.action_variables)
+
+                exclude_list = obs_config.get("exclude", [])
+                if exclude_list:
+                    self.state_variables = [prop for prop in self.state_variables if prop.name not in exclude_list]
+
+                self.state_variables = tuple(self.state_variables)
+            else:
+                self.state_variables = (
+                    FlightTask.base_state_variables
+                    + self.tracking_state_variables
+                    + self.extra_state_variables
+                    + self.oppo_state_variables
+                    + self.action_variables
+                )
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')

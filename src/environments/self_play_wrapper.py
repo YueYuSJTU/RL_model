@@ -58,10 +58,15 @@ class SelfPlayWrapper(gym.Wrapper):
         strategy_dirs = self._find_strategy_dirs(self.pool_roots)
         self.opponent_models = []
 
+        # Get current environment's feature names
+        current_obs_names = []
+        if hasattr(self.env.unwrapped, 'task') and hasattr(self.env.unwrapped.task, 'state_variables'):
+            current_obs_names = [prop.name for prop in self.env.unwrapped.task.state_variables]
+
         for root in strategy_dirs:
             model = self._load_opponent_model(root)
             env_config = self._load_opponent_env_config(root)
-            wrapped_model = ObsAdaptingModel(model, env_config)
+            wrapped_model = ObsAdaptingModel(model, env_config, current_obs_names)
             self.opponent_models.append(wrapped_model)
 
         self.opponent_stats = {i: {'wins': 0, 'games': 0} for i in range(len(self.opponent_models))}
