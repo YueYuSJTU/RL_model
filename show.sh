@@ -616,6 +616,18 @@ if [ "$manual_mode" -eq 1 ]; then
     manual_arg="--manual"
 fi
 
+# 构造并打印最终将要执行的命令（但不执行）
+cmd=(python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" --n_episode "$n_episode")
+
+# 如果 model_num_param/opponent_pool_path_param/manual_arg 非空，追加为单个参数元素
+if [ -n "$model_num_param" ]; then cmd+=("$model_num_param"); fi
+if [ -n "$opponent_pool_path_param" ]; then cmd+=("$opponent_pool_path_param"); fi
+if [ -n "$manual_arg" ]; then cmd+=("$manual_arg"); fi
+
+echo "最终指令:"
+# 使用 %q 以便显示带引号/转义的参数，便于复制粘贴执行
+printf '%q ' "${cmd[@]}"
+echo
 # 调用Python脚本进行评估
 echo "开始运行..."
 python3 -m src.show --exp_path "$selected_result" --render_mode "$render_mode" --n_episode "$n_episode" $model_num_param $opponent_pool_path_param $manual_arg

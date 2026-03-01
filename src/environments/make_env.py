@@ -35,10 +35,15 @@ def create_env(
         if combined_wrapper_class is not None:
             env = combined_wrapper_class(env)
 
-        pool_roots = vec_env_kwargs.get("pool_roots") if vec_env_kwargs else None
-        model_num = vec_env_kwargs.get("model_num", 0) if vec_env_kwargs else 0
+        use_self_play = True
+        if vec_env_kwargs is not None and not vec_env_kwargs.get("use_self_play_wrapper", True):
+            use_self_play = False
 
-        return SelfPlayWrapper(env, pool_roots=pool_roots, model_num=model_num)
+        if use_self_play:
+            pool_roots = vec_env_kwargs.get("pool_roots") if vec_env_kwargs else None
+            model_num = vec_env_kwargs.get("model_num", 0) if vec_env_kwargs else 0
+            return SelfPlayWrapper(env, pool_roots=pool_roots, model_num=model_num)
+        return env
 
     if training:
         vec_env = make_vec_env(
