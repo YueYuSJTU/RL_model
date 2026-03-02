@@ -8,6 +8,19 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 
+
+def _sanitize_exp_name(name: str) -> str:
+    name = (name or "").strip()
+    if not name:
+        return ""
+    out = []
+    for ch in name:
+        if ch.isalnum() or ch in ("-", "_", "."):
+            out.append(ch)
+        else:
+            out.append("_")
+    return "".join(out).strip("_")
+
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback, ProgressBarCallback
 from stable_baselines3.common.vec_env import VecNormalize
@@ -27,7 +40,7 @@ class UnifiedTrainer:
     Orchestrates a multi-stage training process, including standard stages and a final "battle training"
     stage that interacts with an opponent pool.
     """
-    def __init__(self, config_path: str, pool_path: str, pretrained_path: str = "", debug_mode: bool = False):
+    def __init__(self, config_path: str, pool_path: str, pretrained_path: str = "", debug_mode: bool = False, exp_name: str = ""):
         """
         Initializes the UnifiedTrainer.
 
@@ -45,6 +58,7 @@ class UnifiedTrainer:
         self.pool_path = pool_path
         self.pretrained_path = pretrained_path
         self.debug_mode = debug_mode
+        self.exp_name = exp_name
         self.stage_keys = sorted(self.full_config.keys())
 
         self.model = None
@@ -65,7 +79,9 @@ class UnifiedTrainer:
         else:
             home_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_root = next(iter(self.full_config.values()))['log_root']
-            self.train_path = os.path.join(log_root, home_timestamp)
+            exp = _sanitize_exp_name(self.exp_name)
+            folder = home_timestamp if exp == "" else f"{home_timestamp}_{exp}"
+            self.train_path = os.path.join(log_root, folder)
             os.makedirs(self.train_path, exist_ok=True)
             logging.info(f"Starting new training run in: '{self.train_path}'")
 
@@ -248,6 +264,7 @@ class UnifiedTrainer:
         total_timesteps = stage_cfg.get("total_timesteps", int(1e12))
         battle_step = stage_cfg['battle_step']
         n_episodes_eval = stage_cfg.get('n_episodes_eval', 500)
+        battle_cycles = int(stage_cfg.get('battle_cycles', 0) or 0)
         num_cycles = total_timesteps // battle_step
 
         try:
@@ -310,6 +327,10 @@ class UnifiedTrainer:
                 self.pool_manager.update_pool(new_model_path=cycle_path, n_episodes=n_episodes_eval)
                 train_env.update_opponent_models()
 
+                if battle_cycles > 0 and completed_cycles >= battle_cycles:
+                    logger.info(f"Reached configured battle_cycles={battle_cycles}. Terminating battle training.")
+                    break
+
                 if self.debug_mode and completed_cycles >= 2:
                     logger.info("Debug mode: Reached 2 battle cycles. Terminating training.")
                     break
@@ -328,6 +349,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained_path", type=str, default="",
                         help="Path to a root training directory (e.g., experiments/20250928_...) to resume a run.")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode (terminates after 2 battle cycles).")
+    parser.add_argument("--exp_name", type=str, default="", help="Experiment name appended to timestamp folder")
 
     args = parser.parse_args()
 
@@ -335,6 +357,7 @@ if __name__ == "__main__":
         config_path=args.config,
         pool_path=args.pool_path,
         pretrained_path=args.pretrained_path,
-        debug_mode=args.debug
+        debug_mode=args.debug,
+        exp_name=args.exp_name
     )
     trainer.run()
