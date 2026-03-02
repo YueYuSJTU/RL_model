@@ -4,10 +4,10 @@
 
 # Run the training pipeline in debug mode with a timeout
 echo "Starting training pipeline test (with 5 minute timeout)..."
-timeout 30 /home/ubuntu/miniconda3/envs/js_gpu/bin/python -m src.training.train \
-    --config configs/battle_train_config_test_version.yaml \
+timeout 300 /home/ubuntu/miniconda3/envs/js_gpu/bin/python -m src.training.train \
+    --config configs/debug_cpu_config.yaml \
     --pool_path /home/ubuntu/Workfile/RL/RL_model/opponent_pool/test_pool \
-    --debug
+    --debug --exp_name cpu_debug
 
 EXIT_CODE=$?
 
