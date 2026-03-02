@@ -59,15 +59,33 @@ class UnifiedTrainer:
         self.pretrained_path = pretrained_path
         self.debug_mode = debug_mode
         self.exp_name = exp_name
-        self.stage_keys = sorted(self.full_config.keys())
+
+        # Optional: per-experiment opponent pool config (kept at top-level in YAML)
+        self.opponent_pool_cfg = self.full_config.get("opponent_pool")
+
+        # Only treat stage* keys as training stages (top-level metadata like opponent_pool
+        # should not be interpreted as a stage)
+        self.stage_keys = sorted([k for k in self.full_config.keys() if str(k).startswith("stage")])
 
         self.model = None
         self.last_best_model_path = ""
 
         self._setup_paths()
+
+        # If configured, materialize a per-experiment opponent pool by copying from base
+        if self.opponent_pool_cfg is not None:
+            self.pool_path = self._setup_experiment_opponent_pool(self.opponent_pool_cfg)
+
+        whitelist = []
+        max_pool_size = 8
+        if isinstance(self.opponent_pool_cfg, dict):
+            whitelist = self.opponent_pool_cfg.get("whitelist") or []
+            max_pool_size = int(self.opponent_pool_cfg.get("max_pool_size", 8))
+
         self.pool_manager = PoolManager(
             pool_path=self.pool_path,
-            max_pool_size=8 # Default, will be overridden by battle config
+            max_pool_size=max_pool_size,
+            whitelist=whitelist,
         )
         logging.info("Unified Trainer initialized.")
 
@@ -84,6 +102,38 @@ class UnifiedTrainer:
             self.train_path = os.path.join(log_root, folder)
             os.makedirs(self.train_path, exist_ok=True)
             logging.info(f"Starting new training run in: '{self.train_path}'")
+
+    def _setup_experiment_opponent_pool(self, cfg: Dict[str, Any]) -> str:
+        if not isinstance(cfg, dict):
+            raise ValueError("opponent_pool must be a mapping/dict")
+
+        base_dir = cfg.get("base_dir", "./base_opponent_model")
+        opponents = cfg.get("opponents")
+        pool_subdir = cfg.get("pool_subdir", "opponent_pool")
+
+        if not opponents or not isinstance(opponents, (list, tuple)):
+            raise ValueError("opponent_pool.opponents must be a non-empty list")
+
+        base_dir_abs = os.path.abspath(base_dir)
+        if not os.path.isdir(base_dir_abs):
+            raise FileNotFoundError(f"base opponent dir not found: {base_dir_abs}")
+
+        exp_pool_root = os.path.join(self.train_path, pool_subdir)
+        os.makedirs(exp_pool_root, exist_ok=True)
+
+        for opp_id in opponents:
+            opp_id = str(opp_id)
+            src = os.path.join(base_dir_abs, opp_id)
+            dst = os.path.join(exp_pool_root, opp_id)
+            if not os.path.isdir(src):
+                raise FileNotFoundError(f"base opponent id dir not found: {src}")
+            if os.path.exists(dst):
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+
+        logging.info(f"[opponent_pool] Using per-experiment pool at: {exp_pool_root}")
+        logging.info(f"[opponent_pool] Seeded from base: {base_dir_abs} (ids={list(map(str, opponents))})")
+        return exp_pool_root
 
     def run(self):
         """Executes the entire training pipeline, stage by stage."""
@@ -228,8 +278,9 @@ class UnifiedTrainer:
         logger = setup_logger(stage_path)
         logger.info(f"Entering BATTLE-TRAINING mode for stage '{self.stage_keys[-1]}'.")
 
-        # --- Update PoolManager with battle-specific config ---
-        self.pool_manager.max_pool_size = stage_cfg.get("max_pool_size", 8)
+        # --- Update PoolManager with config ---
+        if isinstance(self.opponent_pool_cfg, dict) and self.opponent_pool_cfg.get("max_pool_size") is not None:
+            self.pool_manager.max_pool_size = int(self.opponent_pool_cfg["max_pool_size"])
 
         # --- Load configs ---
         env_cfg = load_config(os.path.join("configs", "env", f"{stage_cfg['env']}.yaml"))
@@ -345,13 +396,20 @@ class UnifiedTrainer:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unified trainer for multi-stage and battle training.")
     parser.add_argument("--config", type=str, required=True, help="Path to the unified training configuration file.")
-    parser.add_argument("--pool_path", type=str, required=True, help="Path to the opponent pool directory.")
+    parser.add_argument("--pool_path", type=str, default="", help="Path to the opponent pool directory (legacy mode).")
     parser.add_argument("--pretrained_path", type=str, default="",
                         help="Path to a root training directory (e.g., experiments/20250928_...) to resume a run.")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode (terminates after 2 battle cycles).")
     parser.add_argument("--exp_name", type=str, default="", help="Experiment name appended to timestamp folder")
 
     args = parser.parse_args()
+
+    with open(args.config, encoding="utf-8") as f:
+        _cfg = yaml.safe_load(f)
+
+    if (not isinstance(_cfg, dict)) or ("opponent_pool" not in _cfg):
+        if not args.pool_path:
+            raise SystemExit("--pool_path is required when config has no top-level opponent_pool")
 
     trainer = UnifiedTrainer(
         config_path=args.config,

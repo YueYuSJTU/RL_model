@@ -20,9 +20,9 @@ class PoolManager:
     4. 替换目标是那个被新模型以最高分击败的对手。
     """
     
-    def __init__(self, pool_path: str, max_pool_size: int = 10, 
+    def __init__(self, pool_path: str, max_pool_size: int = 10,
                  score_weights: Dict[str, float] = None,
-                 whitelist: List[str] = ["1", "2", "3"]):
+                 whitelist: List[str] = None):
         """
         初始化 PoolManager.
 

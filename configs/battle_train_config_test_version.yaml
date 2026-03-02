@@ -19,8 +19,15 @@ stage2:
   
   # --- Battle Training Parameters (triggers battle mode for this last stage) ---
   battle_step: 300_000      # Every battle_step, a new model challenges the pool.
-  battle_cycles: 5         # 对战 5 个 cycle 后结束
-  max_pool_size: 4          # Max opponents in the pool.
+  battle_cycles: 5         # 对战几个 cycle 后结束
   n_episodes_eval: 50      # Episodes per evaluation match.
   threshold_timesteps: 600_000  # Timesteps to reach to increase opponent difficulty(goal point to jsbsim).
   update_freq_episodes: 1_000  # Episodes between opponent difficulty updates.
+
+opponent_pool:
+  base_dir: "./base_opponent_model"
+  opponents: ["1", "2"]
+  whitelist: ["1", "2"]          # 可省略
+  pool_subdir: "opponent_pool"  # 位于实验目录下的对手池名称，可省略
+  max_pool_size: 4          # Max opponents in the pool.
+  

@@ -5,6 +5,7 @@
 logs/
 experiments/
 opponent_pool/
+base_opponent_model/
 condaenv*
 .output*
 
