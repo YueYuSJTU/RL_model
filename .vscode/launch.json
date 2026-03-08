@@ -18,7 +18,7 @@
                 "--render_mode", "human",
                 "--random_input", "False",
                 "--pool_path", "./opponent_pool/pool4",
-                "--model_num", "0",
+                "--model_num", "1",
             ]
         },
         {

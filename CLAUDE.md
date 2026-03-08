@@ -27,6 +27,8 @@
 
 ## 统一训练入口 (支持多阶段和对战)
 
+**当claude code需要进行评估时，直接运行test_training_pipeline.sh即可（设置最大运行时长为1分钟）。这是一个简易训练启动器，可以测试训练程序能否直接运行，如果使用print打印输出信息，也能直接看到。**
+
 使用 `src/training/train.py`:
 ```bash
 python -m src.training.train \

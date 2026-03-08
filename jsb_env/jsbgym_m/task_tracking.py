@@ -21,6 +21,12 @@ from jsbgym_m.task_advanced import TrajectoryTask
 from jsbgym_m.coordinate import GPS_utils, GPS_NED
 from stable_baselines3 import PPO
 
+class InitMode(enum.Enum):
+    ATTACK = "attack"
+    DEFENSE = "defense"
+    BALANCED = "balanced"
+
+
 class TrackingTask(FlightTask):
     """
     Base class for tracking tasks.
@@ -206,6 +212,15 @@ class TrackingTask(FlightTask):
     THROTTLE_CMD = 0.4
     MIXTURE_CMD = 0.8
     HP = 5
+
+    # --- initial condition randomization (relative NED frame) ---
+    init_mode: InitMode = InitMode.BALANCED
+    init_range_distance_ft: Tuple[float, float] = (6000.0, 12000.0)
+    init_range_altitude_delta_ft: Tuple[float, float] = (-1000.0, 1000.0)
+    init_cone_half_angle_deg: float = 30.0
+    init_heading_sigma_deg: float = 20.0
+    # If True (default), in ATTACK/DEFENSE both aircraft start roughly same heading (tail-chase style)
+    init_same_heading_for_attack_defense: bool = True
     aircraft_HP = prp.BoundedProperty(
         "aircraft/aircraft_HP", "aircraft HP", 0, HP
     )
@@ -220,6 +235,7 @@ class TrackingTask(FlightTask):
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
         obs_config: Optional[dict] = None,
+        init_mode: str = "balanced",        # "attack", "defense", or "balanced"
     ):
         """
         Constructor.
@@ -228,6 +244,13 @@ class TrackingTask(FlightTask):
         :param aircraft: the aircraft used in the simulation
         """
         self.max_time_s = episode_time_s
+        # init mode
+        try:
+            self.init_mode = InitMode(str(init_mode).lower())
+        except Exception:
+            raise ValueError(
+                f"Unsupported init_mode: {init_mode}. Expected one of {[m.value for m in InitMode]}"
+            )
         self.step_frequency_hz = step_frequency_hz
         episode_steps = math.ceil(self.max_time_s * step_frequency_hz)
         self.steps_left = BoundedProperty(
@@ -546,29 +569,117 @@ class TrackingTask(FlightTask):
         
         return normalized_obs
 
+    def _sample_uniform_in_cone_2d(self, axis_angle_rad: float, half_angle_rad: float) -> float:
+        return random.uniform(axis_angle_rad - half_angle_rad, axis_angle_rad + half_angle_rad)
+
+    def _maybe_init_pair_geometry(self) -> None:
+        """Sample relative geometry once per episode and cache it on self."""
+        if getattr(self, "_init_pair_cached", False):
+            return
+
+        d_min, d_max = self.init_range_distance_ft
+        dz_min, dz_max = self.init_range_altitude_delta_ft
+        distance_ft = random.uniform(d_min, d_max)
+        delta_alt_ft = random.uniform(dz_min, dz_max)
+
+        half_angle_rad = math.radians(self.init_cone_half_angle_deg)
+
+        # sample own heading first; use it to define cone axis in world frame
+        self_heading = random.gauss(self.INITIAL_HEADING_DEG, self.init_heading_sigma_deg) % 360.0
+        self_heading_rad = math.radians(self_heading)
+
+        if self.init_mode == InitMode.ATTACK:
+            # opponent is in front cone of self (relative to self heading)
+            axis = self_heading_rad
+            oppo_world_bearing = self._sample_uniform_in_cone_2d(axis, half_angle_rad)
+            rel_heading_rad = 0.0 if self.init_same_heading_for_attack_defense else math.pi
+            oppo_heading = (
+                self_heading
+                + math.degrees(rel_heading_rad)
+                + random.gauss(0.0, self.init_heading_sigma_deg)
+            ) % 360.0
+        elif self.init_mode == InitMode.DEFENSE:
+            # self is in front cone of opponent => opponent is behind self
+            axis = (self_heading_rad + math.pi)
+            oppo_world_bearing = self._sample_uniform_in_cone_2d(axis, half_angle_rad)
+            rel_heading_rad = 0.0 if self.init_same_heading_for_attack_defense else math.pi
+            oppo_heading = (
+                self_heading
+                + math.degrees(rel_heading_rad)
+                + random.gauss(0.0, self.init_heading_sigma_deg)
+            ) % 360.0
+        else:
+            oppo_world_bearing = random.uniform(-math.pi, math.pi)
+            oppo_heading = random.uniform(0.0, 360.0)
+
+        # relative N/E position of opponent w.r.t. self (self at origin)
+        rel_north = distance_ft * math.cos(oppo_world_bearing)
+        rel_east = distance_ft * math.sin(oppo_world_bearing)
+
+        # Store as (north, east)
+        self._init_pair_cached = True
+        self._init_self_ned_xy_ft = (0.0, 0.0)
+        self._init_oppo_ned_ne_ft = (rel_north, rel_east)
+        self._init_self_alt_ft = 10000.0
+        self._init_oppo_alt_ft = 10000.0 + delta_alt_ft
+        self._init_self_heading_deg = self_heading
+        self._init_oppo_heading_deg = oppo_heading
+
+        # self._init_pair_cached = True
+        # self._init_self_ned_xy_ft = (0.0, 0.0)
+        # self._init_oppo_ned_ne_ft = (rel_x, rel_y)
+        # self._init_self_alt_ft = 10000.0
+        # self._init_oppo_alt_ft = 10000.0 + delta_alt_ft
+        # self._init_self_heading_deg = self_heading
+        # self._init_oppo_heading_deg = oppo_heading
+
+    def _clear_init_pair_cache(self) -> None:
+        self._init_pair_cached = False
+
     def get_opponent_initial_conditions(self) -> Dict[Property, float]:
         """
         Get the initial conditions for the opponent aircraft.
         """
+        self._maybe_init_pair_geometry()
+
         base_oppo_initial_conditions = (
             types.MappingProxyType(  # MappingProxyType makes dict immutable
                 {
-                    prp.initial_altitude_ft: 10000,
+                    prp.initial_altitude_ft: float(self._init_oppo_alt_ft),
                     prp.initial_terrain_altitude_ft: 0.00000001,
+                    # keep same default reference LLA; randomize relative position by offsetting LLA
                     prp.initial_longitude_geoc_deg: -2.3273,
-                    prp.initial_latitude_geod_deg: 51.4381,  # corresponds to UoBath
+                    prp.initial_latitude_geod_deg: 51.3781,  # corresponds to UoBath
                 }
             )
         )
+
+        # Apply relative NED offsets to opponent initial LLA (approx, good enough for small areas)
+        # (north, east) in ft
+        north_ft, east_ft = float(self._init_oppo_ned_ne_ft[0]), float(self._init_oppo_ned_ne_ft[1])
+        north_m, east_m = north_ft * 0.3048, east_ft * 0.3048
+        lat0_deg = float(base_oppo_initial_conditions[prp.initial_latitude_geod_deg])
+        lon0_deg = float(base_oppo_initial_conditions[prp.initial_longitude_geoc_deg])
+        lat0_rad = math.radians(lat0_deg)
+        meters_per_deg_lat = 111_320.0
+        meters_per_deg_lon = 111_320.0 * max(1e-6, math.cos(lat0_rad))
+        dlat_deg = north_m / meters_per_deg_lat
+        dlon_deg = east_m / meters_per_deg_lon
+
+        base_oppo_initial_conditions = {
+            **base_oppo_initial_conditions,
+            prp.initial_latitude_geod_deg: lat0_deg + dlat_deg,
+            prp.initial_longitude_geoc_deg: lon0_deg + dlon_deg,
+        }
         extra_conditions = {
-            prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(), # 这里后续应该改成目标飞机的巡航速度
+            prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(),
             prp.initial_v_fps: 0,
             prp.initial_w_fps: 0,
             prp.initial_p_radps: 0,
             prp.initial_q_radps: 0,
             prp.initial_r_radps: 0,
             prp.initial_roc_fpm: 0,
-            prp.initial_heading_deg: 180,
+            prp.initial_heading_deg: float(self._init_oppo_heading_deg),
         }
         return {**base_oppo_initial_conditions, **extra_conditions}
     
@@ -585,16 +696,18 @@ class TrackingTask(FlightTask):
 
 
     def get_initial_conditions(self) -> Dict[Property, float]:
+        self._maybe_init_pair_geometry()
+
         base_initial_conditions = (
-        types.MappingProxyType(  # MappingProxyType makes dict immutable
-            {
-                prp.initial_altitude_ft: 10000,
-                prp.initial_terrain_altitude_ft: 0.00000001,
-                prp.initial_longitude_geoc_deg: -2.3273,
-                prp.initial_latitude_geod_deg: 51.3781,  # corresponds to UoBath
-            }
+            types.MappingProxyType(  # MappingProxyType makes dict immutable
+                {
+                    prp.initial_altitude_ft: float(self._init_self_alt_ft),
+                    prp.initial_terrain_altitude_ft: 0.00000001,
+                    prp.initial_longitude_geoc_deg: -2.3273,
+                    prp.initial_latitude_geod_deg: 51.3781,  # corresponds to UoBath
+                }
+            )
         )
-    )
         extra_conditions = {
             prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(),
             prp.initial_v_fps: 0,
@@ -603,7 +716,7 @@ class TrackingTask(FlightTask):
             prp.initial_q_radps: 0,
             prp.initial_r_radps: 0,
             prp.initial_roc_fpm: 0,
-            prp.initial_heading_deg: self.INITIAL_HEADING_DEG,
+            prp.initial_heading_deg: float(self._init_self_heading_deg),
         }
         return {**base_initial_conditions, **extra_conditions}
 
@@ -841,6 +954,8 @@ class TrackingTask(FlightTask):
         return observation
 
     def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
+        # clear cached initial geometry at episode start so next reset re-samples
+        self._clear_init_pair_cache()
         super()._new_episode_init(sim)
         sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
         sim[self.steps_left] = self.steps_left.max
