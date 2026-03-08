@@ -235,33 +235,40 @@ class TrackingTask(FlightTask):
         )
         self.aircraft = aircraft
         if not hasattr(self, 'state_variables'):
-            if obs_config is not None:
-                self.state_variables = []
-                if obs_config.get("base", True):
-                    self.state_variables.extend(FlightTask.base_state_variables)
-                if obs_config.get("tracking", True):
-                    self.state_variables.extend(self.tracking_state_variables)
-                if obs_config.get("extra", True):
-                    self.state_variables.extend(self.extra_state_variables)
-                if obs_config.get("oppo", True):
-                    self.state_variables.extend(self.oppo_state_variables)
-                if obs_config.get("action", True):
-                    self.state_variables.extend(self.action_variables)
+            # Keep observation shape fixed across stages for SB3 model loading.
+            # obs_config only masks (zeros) selected observation dimensions.
+            self.state_variables = (
+                FlightTask.base_state_variables
+                + self.tracking_state_variables
+                + self.extra_state_variables
+                + self.oppo_state_variables
+                + self.action_variables
+            )
 
-                exclude_list = obs_config.get("exclude", [])
-                if exclude_list:
-                    self.state_variables = [prop for prop in self.state_variables if prop.name not in exclude_list]
-
-                self.state_variables = tuple(self.state_variables)
-            else:
-                self.state_variables = (
-                    FlightTask.base_state_variables
-                    + self.tracking_state_variables
-                    + self.extra_state_variables
-                    + self.oppo_state_variables
-                    + self.action_variables
-                )
+        exclude_list = obs_config.get("exclude", []) if obs_config is not None else []
+        self._obs_exclude_names = set(exclude_list)
+        self._single_obs_mask = np.array(
+            [0.0 if prop.name in self._obs_exclude_names else 1.0 for prop in self.state_variables],
+            dtype=np.float64,
+        )
+        self._double_obs_mask = np.concatenate([self._single_obs_mask, self._single_obs_mask])
         self.positive_rewards = positive_rewards
+
+        # Reward should be independent from obs_config-driven observation selection.
+        # Keep reward inputs fixed to the default full variable set.
+        self.reward_state_variables = (
+            FlightTask.base_state_variables
+            + self.tracking_state_variables
+            + self.extra_state_variables
+            + self.oppo_state_variables
+            + self.action_variables
+        )
+        reward_legal_attribute_names = [
+            prop.get_legal_name() for prop in self.reward_state_variables
+        ]
+        self.RewardState = namedtuple("RewardState", reward_legal_attribute_names)
+        self.last_reward_state = None
+
         assessor = self.make_assessor(shaping_type)
         self.coordinate_transform = GPS_NED(unit='ft')
         # 控制对手模式为"goal_point"还是"jsbsim"的概率,此数值的调整在train程序中用callback实现
@@ -298,7 +305,7 @@ class TrackingTask(FlightTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_action",
                         prop=prp.aileron_cmd,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -307,7 +314,7 @@ class TrackingTask(FlightTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_thrust",
                         prop=prp.throttle_cmd,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.4,
                         scaling_factor=0.1,
@@ -316,7 +323,7 @@ class TrackingTask(FlightTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_roll",
                         prop=prp.roll_rad,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -341,7 +348,7 @@ class TrackingTask(FlightTask):
                     rewards.SmoothingComponent(
                         name="action_penalty",
                         props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=True,
                         list_length=10,
                         cmp_scale=4.0,
@@ -349,7 +356,7 @@ class TrackingTask(FlightTask):
                     rewards.SmoothingComponent(
                         name="altitude_contain",
                         props=[prp.altitude_sl_ft],
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=True,
                         list_length=20,
                         cmp_scale=80000.0,
@@ -361,7 +368,7 @@ class TrackingTask(FlightTask):
                         name = "relative_position",
                         func=lambda track, adverse: (track/(math.pi)-2)*logistic(adverse/(math.pi),18,0.5) - track/(math.pi) + 1,
                         props=(self.track_angle_rad, self.adverse_angle_rad),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=1.0
                     ),
                     rewards.UserDefinedComponent(
@@ -369,7 +376,7 @@ class TrackingTask(FlightTask):
                         func=lambda closure, adverse, distance:
                             closure/500 * (1-logistic(adverse/(math.pi),18,0.5)) * logistic(distance,1/500,2900),
                         props=(self.closure_rate, self.adverse_angle_rad, self.distance_oppo_ft),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=1.0
                     ),
                     rewards.UserDefinedComponent(
@@ -377,7 +384,7 @@ class TrackingTask(FlightTask):
                         func=lambda distance, track:
                             GammaB(distance) * (1 - logistic(track/(math.pi), 1e5, 1/180)),
                         props=(self.distance_oppo_ft, self.track_angle_rad),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=1.0
                     ),
                     rewards.UserDefinedComponent(
@@ -385,14 +392,14 @@ class TrackingTask(FlightTask):
                         func=lambda distance, adverse:
                             -GammaR(distance) * logistic(adverse/(math.pi), 800, 178/180),
                         props=(self.distance_oppo_ft, self.adverse_angle_rad),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=1.0
                     ),
                     rewards.UserDefinedComponent(
                         name="deck",
                         func=lambda h: -4 * (1-logistic(h, 1/20, 1300)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=1.0
                     ),
                     # rewards.UserDefinedComponent(
@@ -479,10 +486,16 @@ class TrackingTask(FlightTask):
         self._update_custom_properties(sim, opponent_sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
         opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
+
+        reward_state = self.RewardState(
+            *(sim[prop] for prop in self.reward_state_variables)
+        )
         terminated = self._is_terminal(sim, opponent_sim)
         truncated = False
-        reward = self.assessor.assess(state, self.last_state, terminated)
-        reward_components = self.assessor.assess_components(state, self.last_state, terminated)
+        reward = self.assessor.assess(reward_state, self.last_reward_state, terminated)
+        reward_components = self.assessor.assess_components(
+            reward_state, self.last_reward_state, terminated
+        )
         env_info = None
         if terminated:
             reward = self._reward_terminal_override(reward, sim, opponent_sim)
@@ -503,11 +516,13 @@ class TrackingTask(FlightTask):
             self._validate_state(state, terminated, truncated, self_action, reward)
         self._store_reward(reward, sim)
         self.last_state = state
+        self.last_reward_state = reward_state
         # debug goal_point_prob
         reward_components.update({"goal_point_prob": self.goal_point_prob})
         info = {"reward": reward_components, "env_info": env_info}
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
         observation = self.observation_normalization(observation)
+        observation = observation * self._double_obs_mask
 
         # print(f"debug: opponent_hp = {opponent_sim[self.aircraft_HP]}, self_hp = {sim[self.aircraft_HP]}")
 
@@ -835,9 +850,16 @@ class TrackingTask(FlightTask):
         self._update_custom_properties(sim, opponent_sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
         self.last_state = state
+
+        reward_state = self.RewardState(
+            *(sim[prop] for prop in self.reward_state_variables)
+        )
+        self.last_reward_state = reward_state
+
         opponent_state = self.State(*(opponent_sim[prop] for prop in self.state_variables))
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
         observation = self.observation_normalization(observation)
+        observation = observation * self._double_obs_mask
         return observation
 
     def _new_episode_init(self, sim: Simulation, opponent_sim: Simulation=None) -> None:
@@ -934,7 +956,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_thrust",
                         prop=prp.throttle_cmd,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.5,
                         scaling_factor=0.1,
@@ -944,14 +966,14 @@ class TrackingInitTask(TrackingTask):
                         name="deck1",
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=2.0
                     ),
                     rewards.UserDefinedComponent(
                         name="deck2",
                         func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=2.0
                     ),
                 )
@@ -978,7 +1000,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_action",
                         prop=prp.aileron_cmd,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -988,14 +1010,14 @@ class TrackingInitTask(TrackingTask):
                         name="deck1",
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=2.0
                     ),
                     rewards.UserDefinedComponent(
                         name="deck2",
                         func=lambda h: -4 * (1-logistic(-h, 1/200, -12000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=2.0
                     ),
                 )
@@ -1005,7 +1027,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_roll",
                         prop=prp.roll_rad,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -1015,7 +1037,7 @@ class TrackingInitTask(TrackingTask):
                         name="deck1",
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=3.0
                     ),
                 )
@@ -1025,7 +1047,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_roll",
                         prop=prp.roll_rad,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -1035,7 +1057,7 @@ class TrackingInitTask(TrackingTask):
                         name="deck1",
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=3.0
                     ),
                 )
@@ -1043,7 +1065,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.SmoothingComponent(
                         name="action_penalty",
                         props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=True,
                         list_length=10,
                         cmp_scale=4.0,
@@ -1051,7 +1073,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.SmoothingComponent(
                         name="altitude_contain",
                         props=[prp.altitude_sl_ft],
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=True,
                         list_length=20,
                         cmp_scale=20000.0,
@@ -1062,7 +1084,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_action",
                         prop=prp.aileron_cmd,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -1071,7 +1093,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_thrust",
                         prop=prp.throttle_cmd,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.4,
                         scaling_factor=0.1,
@@ -1080,7 +1102,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.ScaledAsymptoticErrorComponent(
                         name="small_roll",
                         prop=prp.roll_rad,
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=False,
                         target=0.0,
                         scaling_factor=0.5,
@@ -1090,7 +1112,7 @@ class TrackingInitTask(TrackingTask):
                         name="deck1",
                         func=lambda h: -4 * (1-logistic(h, 1/200, 3000)),
                         props=(prp.altitude_sl_ft,),
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         cmp_scale=3.0
                     ),
                 )
@@ -1098,7 +1120,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.SmoothingComponent(
                         name="action_penalty",
                         props=[prp.aileron_cmd, prp.elevator_cmd, prp.rudder_cmd],
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=True,
                         list_length=10,
                         cmp_scale=4.0,
@@ -1106,7 +1128,7 @@ class TrackingInitTask(TrackingTask):
                     rewards.SmoothingComponent(
                         name="altitude_contain",
                         props=[prp.altitude_sl_ft],
-                        state_variables=self.state_variables,
+                        state_variables=self.reward_state_variables,
                         is_potential_based=True,
                         list_length=20,
                         cmp_scale=20000.0,

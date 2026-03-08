@@ -1,0 +1,24 @@
+# 环境配置
+plane: "F16"
+task: "TrackingTask"
+shape: "stage2"  # 任务阶段1
+render_mode: null  # 训练时关闭渲染
+use_vec_normalize: False
+norm_obs: False
+norm_reward: False
+clip_obs: 10.0
+obs_config:
+  base: true
+  tracking: true
+  extra: False
+  oppo: False
+  action: true
+  exclude:
+    - "target/bearing-pointMass"
+    - "target/elevation-pointMass"
+
+# wrappers:
+#   - name: "src.environments.ContinueWrapper:ContinueObservation"
+#     kwargs:
+#       skip_frame: 2
+#       total_frame: 10

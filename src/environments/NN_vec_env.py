@@ -79,12 +79,8 @@ class NNVecEnv(SubprocVecEnv):
         self.opponent_model_roots = self._find_strategy_dirs(self.pool_roots)
 
         # 获取当前环境的特征名称，用于动态观察空间映射
+        # 这里必须与实际传入对手模型的 observation（half obs）严格一致，避免错位/截断。
         current_obs_names = []
-        # 由于通过IPC获取task对象会导致pickle错误，我们直接在主进程中推断
-        # 这里的错误是因为ObsAdaptingModel回退到了硬编码逻辑，但硬编码逻辑期望的是58维，而实际是32维
-        # 我们需要手动构建current_obs_names
-
-        # 假设我们正在运行TrackingTask
         try:
             import sys
             import os
@@ -93,26 +89,17 @@ class NNVecEnv(SubprocVecEnv):
             from jsbgym_m.task_tracking import TrackingTask
             from jsbgym_m.tasks import FlightTask
 
-            state_variables = []
-            state_variables.extend(FlightTask.base_state_variables)
-            state_variables.extend(TrackingTask.tracking_state_variables)
-            state_variables.extend(TrackingTask.extra_state_variables)
-            # 假设oppo被排除了
-            # state_variables.extend(TrackingTask.oppo_state_variables)
-            state_variables.extend(TrackingTask.action_variables)
-
+            state_variables = (
+                FlightTask.base_state_variables
+                + TrackingTask.tracking_state_variables
+                + TrackingTask.extra_state_variables
+                + TrackingTask.oppo_state_variables
+                + TrackingTask.action_variables
+            )
             current_obs_names = [prop.name for prop in state_variables]
-            # 排除distance-to-opponent
-            current_obs_names = [name for name in current_obs_names if name != "target/distance-to-opponent"]
         except ImportError:
             logging.warning("Could not import jsbgym_m to infer state variables.")
             current_obs_names = []
-
-        # 确保current_obs_names的长度与实际观察空间匹配
-        # 实际观察空间是32维，我们需要截断或调整
-        # 这是一个临时的修复，更好的方法是从env_config中读取obs_config
-        if len(current_obs_names) > self.observation_space.shape[0]:
-            current_obs_names = current_obs_names[:self.observation_space.shape[0]]
 
         # 加载选择的敌机策略
         self.opponent_models = []

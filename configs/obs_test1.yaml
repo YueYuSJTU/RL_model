@@ -1,7 +1,7 @@
 # 阶段训练通用配置
 stage1:
   agent: ppo_1layer
-  env: f16_tracking_stage1
+  env: obs_test1_stage1
   total_timesteps: 300_000 # Train for a fixed number of steps
   eval_freq: 1000
   log_root: "./experiments"
@@ -10,7 +10,7 @@ stage1:
 
 stage2:
   agent: ppo_1layer
-  env: f16_tracking_stage2
+  env: obs_test1_stage2
   # No total_timesteps: this stage will run until you stop it with Ctrl+C
   eval_freq: 50000
   log_root: "./experiments"

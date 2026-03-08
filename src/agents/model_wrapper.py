@@ -19,6 +19,10 @@ class ObsAdaptingModel:
         self.model = model
         self.env_config = env_config
         self.current_obs_names = current_obs_names or []
+        self._model_obs_dim = None
+        if hasattr(model, "observation_space") and getattr(model.observation_space, "shape", None) is not None:
+            # SB3 models store the observation_space used during training
+            self._model_obs_dim = int(model.observation_space.shape[-1])
         # 暴露内部模型的策略，以便外部代码可以访问action_space等属性
         self.policy = model.policy
 
@@ -119,6 +123,22 @@ class ObsAdaptingModel:
         state_variables = []
 
         if "TrackingTask" in task_name:
+            # New semantics: obs_config masks (zeros) dimensions but does not change shape.
+            full_state_variables = (
+                FlightTask.base_state_variables
+                + TrackingTask.tracking_state_variables
+                + TrackingTask.extra_state_variables
+                + TrackingTask.oppo_state_variables
+                + TrackingTask.action_variables
+            )
+            full_names = [prop.name for prop in full_state_variables]
+
+            # If we can infer the model's expected obs dim and it matches, return full names.
+            if self._model_obs_dim is None or self._model_obs_dim == len(full_names):
+                return full_names
+
+            # Otherwise, fall back to legacy behavior (older models trained with reduced obs dim).
+            state_variables = []
             if obs_config is not None:
                 if obs_config.get("base", True):
                     state_variables.extend(FlightTask.base_state_variables)
@@ -135,13 +155,15 @@ class ObsAdaptingModel:
                 if exclude_list:
                     state_variables = [prop for prop in state_variables if prop.name not in exclude_list]
             else:
-                state_variables = (
-                    FlightTask.base_state_variables
-                    + TrackingTask.tracking_state_variables
-                    + TrackingTask.extra_state_variables
-                    + TrackingTask.oppo_state_variables
-                    + TrackingTask.action_variables
-                )
+                state_variables = list(full_state_variables)
+
+            names = [prop.name for prop in state_variables]
+            if len(names) > self._model_obs_dim:
+                return names[: self._model_obs_dim]
+            if len(names) < self._model_obs_dim:
+                pad = [f"__pad_{i}__" for i in range(self._model_obs_dim - len(names))]
+                return names + pad
+            return names
         elif "GoalPointTask" in task_name:
             # GoalPointTask 的 extra_state_variables 是在 __init__ 中动态创建的
             # 我们需要手动构建它

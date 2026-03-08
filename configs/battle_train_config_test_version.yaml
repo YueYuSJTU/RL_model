@@ -26,8 +26,8 @@ stage2:
 
 opponent_pool:
   base_dir: "./base_opponent_model"
-  opponents: ["1", "2"]
-  whitelist: ["1", "2"]          # 可省略
+  opponents: ["1", "2", "3"]
+  whitelist: ["1", "2", "3"]          # 可省略
   pool_subdir: "opponent_pool"  # 位于实验目录下的对手池名称，可省略
   max_pool_size: 4          # Max opponents in the pool.
   
