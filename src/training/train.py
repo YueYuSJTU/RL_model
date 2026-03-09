@@ -158,7 +158,7 @@ class UnifiedTrainer:
         latest_result = self._find_latest_training_result(self.train_path)
         if latest_result and self.full_config.get("opponent_pool", None):
             logging.info(f"Evaluating final model from {latest_result}")
-            Evaluator.evaluate_pool(latest_result, self.pool_path, n_episodes=1000)
+            Evaluator.evaluate_pool(latest_result, self.pool_path, n_episodes=100)
 
     def _find_latest_training_result(self, base_path):
         """Finds the latest training result directory."""

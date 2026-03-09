@@ -22,6 +22,7 @@ from jsbgym_m.coordinate import GPS_utils, GPS_NED
 from stable_baselines3 import PPO
 
 class InitMode(enum.Enum):
+    FIX = "fix"
     ATTACK = "attack"
     DEFENSE = "defense"
     BALANCED = "balanced"
@@ -235,7 +236,7 @@ class TrackingTask(FlightTask):
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
         obs_config: Optional[dict] = None,
-        init_mode: str = "balanced",        # "attack", "defense", or "balanced"
+        init_mode: str = "fix",        # "fix", "attack", "defense", or "balanced"
     ):
         """
         Constructor.
@@ -588,7 +589,16 @@ class TrackingTask(FlightTask):
         self_heading = random.gauss(self.INITIAL_HEADING_DEG, self.init_heading_sigma_deg) % 360.0
         self_heading_rad = math.radians(self_heading)
 
-        if self.init_mode == InitMode.ATTACK:
+        if self.init_mode == InitMode.FIX:
+            # deterministic geometry (same as pre-randomization behavior)
+            # - fixed separation: 5000 ft
+            # - opposite headings (180 deg apart)
+            # - opponent placed straight ahead of self in world frame
+            distance_ft = 15000.0
+            delta_alt_ft = 0.0
+            oppo_world_bearing = self_heading_rad
+            oppo_heading = (self_heading + 180.0) % 360.0
+        elif self.init_mode == InitMode.ATTACK:
             # opponent is in front cone of self (relative to self heading)
             axis = self_heading_rad
             oppo_world_bearing = self._sample_uniform_in_cone_2d(axis, half_angle_rad)

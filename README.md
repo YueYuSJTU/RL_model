@@ -80,7 +80,7 @@ python -m src.training.train \
 
 **后台运行示例:**
 ```bash
-nohup python -m src.training.train --config "configs/battle_train_config.yaml" --pool_path "./opponent_pool/pool4" --exp_name testA > output.log 2>&1 &
+nohup python -m src.training.train --config "configs/battle_train_config.yaml" --exp_name testA > output.log 2>&1 &
 ```
 
 ---
