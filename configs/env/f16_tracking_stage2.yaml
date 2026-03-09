@@ -8,6 +8,14 @@ norm_obs: False
 norm_reward: False
 clip_obs: 10.0
 
+wrappers:
+  - name: "src.environments.sensor_wrapper:SensorPerturbationWrapper"
+    kwargs:
+      missing_prob: 0.05
+      rel_error_std: 0.02
+      prefixes: ["target/", "oppo/"]
+
+
 # wrappers:
 #   - name: "src.environments.ContinueWrapper:ContinueObservation"
 #     kwargs:

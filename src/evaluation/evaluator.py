@@ -29,6 +29,7 @@ class Evaluator:
         env_cfg: Optional[Dict] = None,
         use_tqdm: bool = True,
         manual_control: bool = False,
+        obs_wrappers: Optional[List[Dict]] = None,
     ) -> Dict[str, float]:
         """
         Evaluate two models in a combat environment without NN wrapper.
@@ -45,6 +46,8 @@ class Evaluator:
 
         env_cfg["render_mode"] = render_mode
         env_cfg["use_vec_normalize"] = False
+        if obs_wrappers:
+            env_cfg["wrappers"] = list(obs_wrappers)
         vec_env = create_env(env_cfg, training=False, vec_env_cls=DummyVecEnv)
         vec_env.training = False
         vec_env.norm_reward = False
@@ -220,6 +223,7 @@ class Evaluator:
         render_mode: Optional[str] = None,
         use_tqdm: bool = True,
         result_filename: str = "evaluation_results.yaml",
+        obs_wrappers: Optional[List[Dict]] = None,
     ) -> Dict:
         def _is_valid_model_dir(path: str) -> bool:
             if not os.path.isdir(path):
@@ -255,6 +259,7 @@ class Evaluator:
                 n_episodes=n_episodes,
                 render_mode=render_mode,
                 use_tqdm=use_tqdm,
+                obs_wrappers=obs_wrappers,
             )
             sanitized: Dict[str, float] = {}
             for key, value in raw_metrics.items():

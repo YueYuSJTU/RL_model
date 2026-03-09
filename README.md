@@ -115,6 +115,12 @@ nohup python -m src.training.train --config "configs/battle_train_config.yaml" -
 > - 手柄控制优先，如果未检测到手柄则回退到键盘控制。
 > - 如果手柄键位不正确，可以使用 `tests/test_joystick_id.py` 测试键位，并在 `src/utils/manual_control.py` 中进行修改。
 
+### 3.3 在show中应用敌机状态干扰器
+```bash
+python3 -m src.show --exp_path ./experiments/20260302_220408_obs_test0//stage2//20260303_184122_cycle_30/ --render_mode anim3d --n_episode 1 --model_num 1 --pool_path ./opponent_pool/best_models/ --sensor_missing_prob 0.5 --sensor_rel_error_std 0.2
+```
+评估和可视化都添加两个额外参数即可，因用的少暂时还没做启动脚本适配
+
 ---
 
 ## 4. 配置文件编写

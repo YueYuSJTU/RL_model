@@ -5,15 +5,30 @@ import argparse
 sys.path.insert(0, "/home/ubuntu/Workfile/RL/RL_model")
 from src.evaluation.evaluator import Evaluator
 
-def show(exp_path: str, render_mode: str = "human", model_num: int = 0, pool_path: str = None, manual_control: bool = False) -> None:
+def show(exp_path: str, render_mode: str = "human", model_num: int = 0, pool_path: str = None, manual_control: bool = False,
+         sensor_missing_prob: float = 0.0, sensor_rel_error_std: float = 0.0) -> None:
     model1_path = exp_path
     model2_path = os.path.join(pool_path, str(model_num))
+    obs_wrappers = None
+    if sensor_missing_prob > 0.0 or sensor_rel_error_std > 0.0:
+        obs_wrappers = [
+            {
+                "name": "src.environments.sensor_wrapper:SensorPerturbationWrapper",
+                "kwargs": {
+                    "missing_prob": sensor_missing_prob,
+                    "rel_error_std": sensor_rel_error_std,
+                    "prefixes": ["target/", "oppo/"]
+                },
+            }
+        ]
+
     results = Evaluator.run_match(
         model1_path=model1_path,
         model2_path=model2_path,
         n_episodes=1,
         render_mode=render_mode,
         manual_control=manual_control,
+        obs_wrappers=obs_wrappers,
     )
     win_rate = results["win_rate"]
     draw_rate = results["draw_rate"]
@@ -36,19 +51,43 @@ if __name__ == "__main__":
     parser.add_argument("--model_num", type=int, default=0, help="Model number for multi-agent environments")
     parser.add_argument("--n_episode", type=int, default=1, help="Number of episodes for evaluation.")
     parser.add_argument("--manual", action="store_true", help="Enable keyboard manual control for agent 1.")
+    parser.add_argument("--sensor_missing_prob", type=float, default=0.0, help="Missing probability for SensorPerturbationWrapper.")
+    parser.add_argument("--sensor_rel_error_std", type=float, default=0.0, help="Relative error std for SensorPerturbationWrapper.")
 
     args = parser.parse_args()
     if args.render_mode == "none" or args.render_mode == "None":
         args.render_mode = None
     if args.n_episode <= 1:
-        show(args.exp_path, args.render_mode, model_num=args.model_num, pool_path=args.pool_path, manual_control=args.manual)
+        show(
+            args.exp_path,
+            args.render_mode,
+            model_num=args.model_num,
+            pool_path=args.pool_path,
+            manual_control=args.manual,
+            sensor_missing_prob=args.sensor_missing_prob,
+            sensor_rel_error_std=args.sensor_rel_error_std,
+        )
     else:
         if args.pool_path is None:
             raise ValueError("pool_path is required when n_episode > 1.")
+        obs_wrappers = None
+        if args.sensor_missing_prob > 0.0 or args.sensor_rel_error_std > 0.0:
+            obs_wrappers = [
+                {
+                    "name": "src.environments.sensor_wrapper:SensorPerturbationWrapper",
+                    "kwargs": {
+                        "missing_prob": args.sensor_missing_prob,
+                        "rel_error_std": args.sensor_rel_error_std,
+                        "prefixes": ["target/", "oppo/"]
+                    },
+                }
+            ]
+
         result = Evaluator.evaluate_pool(
             model1_path=args.exp_path,
             target_path=args.pool_path,
             n_episodes=args.n_episode,
             render_mode=args.render_mode,
+            obs_wrappers=obs_wrappers,
         )
         print(f"Evaluation results saved to {result['result_path']}")
