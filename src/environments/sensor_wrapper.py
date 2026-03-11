@@ -116,8 +116,8 @@ class SensorPerturbationWrapper(gym.ObservationWrapper):
 
             out[:, sl] = agent
 
-        print(f"SensorPerturbationWrapper: missing_prob={self.missing_prob}, rel_error_std={self.rel_error_std}, "
-              f"num_perturbed={np.sum(sel)}, num_missing={np.sum(miss) if self.missing_prob > 0.0 else 0}")
+        # print(f"SensorPerturbationWrapper: missing_prob={self.missing_prob}, rel_error_std={self.rel_error_std}, "
+        #       f"num_perturbed={np.sum(sel)}, num_missing={np.sum(miss) if self.missing_prob > 0.0 else 0}")
         if isinstance(obs, np.ndarray):
             return out.astype(obs.dtype, copy=False)
         return out

@@ -236,7 +236,7 @@ class TrackingTask(FlightTask):
         episode_time_s: float = DEFAULT_EPISODE_TIME_S,
         positive_rewards: bool = True,
         obs_config: Optional[dict] = None,
-        init_mode: str = "fix",        # "fix", "attack", "defense", or "balanced"
+        init_mode: str = "balanced",        # "fix", "attack", "defense", or "balanced"
     ):
         """
         Constructor.
@@ -529,7 +529,50 @@ class TrackingTask(FlightTask):
         self.last_state = state
         # debug goal_point_prob
         reward_components.update({"goal_point_prob": self.goal_point_prob})
-        info = {"reward": reward_components, "env_info": env_info}
+        # Step-level metrics (for evaluation time series)
+        # Note: gun_opportunity follows the same condition used in _update_HP (no geometric rebuild).
+        gun_opportunity = 1.0 if (
+            sim[self.track_angle_rad] <= self.GUN_ANGLE
+            and 500 <= sim[self.distance_oppo_ft] <= self.GUN_RANGE
+        ) else 0.0
+
+        # Overshoot approximation (angle-rule): opponent on/near our 6 o'clock while we are also not in a good offensive track
+        # (thresholds chosen to be simple and stable; evaluator will aggregate as time ratio)
+        overshoot_flag = 1.0 if (
+            sim[self.track_angle_rad] >= (5.0 * math.pi / 6.0)
+            and opponent_sim[self.track_angle_rad] <= (math.pi / 3.0)
+        ) else 0.0
+
+        gun_opportunity_oppo = 1.0 if (
+            opponent_sim[self.track_angle_rad] <= self.GUN_ANGLE
+            and 500 <= sim[self.distance_oppo_ft] <= self.GUN_RANGE
+        ) else 0.0
+
+        metrics_step = {
+            # self (model1) perspective
+            "track_angle_rad": float(sim[self.track_angle_rad]),
+            "adverse_angle_rad": float(opponent_sim[self.adverse_angle_rad]),
+            "gun_opportunity": float(gun_opportunity),
+
+            # opponent (model2) perspective
+            "oppo_track_angle_rad": float(opponent_sim[self.track_angle_rad]),
+            "oppo_adverse_angle_rad": float(sim[self.adverse_angle_rad]),
+            "gun_opportunity_oppo": float(gun_opportunity_oppo),
+
+            # shared/other
+            "distance_oppo_ft": float(sim[self.distance_oppo_ft]),
+            "closure_rate_fps": float(sim[self.closure_rate]),
+            "hp_self": float(sim[self.aircraft_HP]),
+            "hp_oppo": float(opponent_sim[self.aircraft_HP]),
+            "overshoot_flag": float(overshoot_flag),
+            "u_fps": float(sim[prp.u_fps]),
+            "altitude_sl_ft": float(sim[prp.altitude_sl_ft]),
+            "oppo_u_fps": float(opponent_sim[prp.u_fps]),
+            "oppo_altitude_sl_ft": float(opponent_sim[prp.altitude_sl_ft]),
+            "steps_left": float(sim[self.steps_left]),
+        }
+
+        info = {"reward": reward_components, "env_info": env_info, "metrics_step": metrics_step}
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
         observation = self.observation_normalization(observation)
 

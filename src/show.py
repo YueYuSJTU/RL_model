@@ -42,6 +42,32 @@ def show(exp_path: str, render_mode: str = "human", model_num: int = 0, pool_pat
     print(f"Opponent Fall Rate: {opponent_fall_rate:.2%}, Avg Win Time: {avg_win_time:.2f}, Avg Reward: {avg_reward:.2f}")
     print(f"Avg HP: {avg_hp:.2f}, Avg Opponent HP: {avg_hp_oppo:.2f}")
 
+    # key extended metrics (keep console short)
+    if "gun_opportunity_time_ratio" in results:
+        print(
+            "[SELF ] GunOpp: {:.2%} | DamageRate: {:.4f} | TrackMean(rad): {:.3f} | AdvMean(rad): {:.3f} | ΔEsMean: {:.2f}".format(
+                results.get("gun_opportunity_time_ratio", 0.0),
+                results.get("damage_rate", 0.0),
+                results.get("track_angle_mean", 0.0),
+                results.get("adverse_angle_mean", 0.0),
+                results.get("specific_energy_mean", 0.0),
+            )
+        )
+        print(
+            "[OPPO ] GunOpp: {:.2%} | DamageRate: {:.4f} | TrackMean(rad): {:.3f} | AdvMean(rad): {:.3f} | ΔEsMean: {:.2f}".format(
+                results.get("gun_opportunity_time_ratio_oppo", 0.0),
+                results.get("damage_rate_oppo", 0.0),
+                results.get("track_angle_mean_oppo", 0.0),
+                results.get("adverse_angle_mean_oppo", 0.0),
+                results.get("specific_energy_mean_oppo", 0.0),
+            )
+        )
+        print(
+            "Overshoot TimeRatio (self-defined): {:.2%}".format(
+                results.get("overshoot_time_ratio", 0.0),
+            )
+        )
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_path", type=str, required=True)

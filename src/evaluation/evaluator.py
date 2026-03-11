@@ -98,6 +98,27 @@ class Evaluator:
         win_steps = []
         total_rewards = []
 
+        # Extended metrics (episode-level aggregates) - model1(self)
+        gun_time_ratios: List[float] = []
+        damage_to_oppo_totals: List[float] = []
+        damage_rates: List[float] = []
+        track_angle_means: List[float] = []
+        adverse_angle_means: List[float] = []
+        overshoot_time_ratios: List[float] = []
+        delta_specific_energy_means: List[float] = []
+        delta_specific_energy_finals: List[float] = []
+
+        # Extended metrics (episode-level aggregates) - model2(opponent)
+        gun_time_ratios_oppo: List[float] = []
+        damage_to_self_totals: List[float] = []
+        damage_rates_oppo: List[float] = []
+        track_angle_means_oppo: List[float] = []
+        adverse_angle_means_oppo: List[float] = []
+        delta_specific_energy_means_oppo: List[float] = []
+        delta_specific_energy_finals_oppo: List[float] = []
+
+        # No timeseries files are saved during evaluation.
+
         try:
             episodes = range(n_episodes)
             if use_tqdm:
@@ -108,6 +129,11 @@ class Evaluator:
                 obs_length = obs.shape[1]
                 episode_done = False
                 episode_reward = 0
+
+                # per-episode step metrics collection
+                step_series: List[Dict[str, float]] = []
+                prev_hp_self: Optional[float] = None
+                prev_hp_oppo: Optional[float] = None
 
                 while not episode_done:
                     if render_mode is not None:
@@ -124,6 +150,26 @@ class Evaluator:
                     obs, reward, terminated, info = vec_env.step(combined_action)
 
                     episode_reward += reward[0]
+
+                    # collect step-level metrics if provided by env/task
+                    metrics_step = info[0].get("metrics_step") if isinstance(info, (list, tuple)) else None
+                    if metrics_step is not None:
+                        # add derived delta HP (from adjacent samples)
+                        hp_self = float(metrics_step.get("hp_self", 0.0))
+                        hp_oppo = float(metrics_step.get("hp_oppo", 0.0))
+                        if prev_hp_self is None:
+                            delta_hp_self = 0.0
+                            delta_hp_oppo = 0.0
+                        else:
+                            delta_hp_self = hp_self - float(prev_hp_self)
+                            delta_hp_oppo = hp_oppo - float(prev_hp_oppo)
+                        prev_hp_self, prev_hp_oppo = hp_self, hp_oppo
+
+                        row = dict(metrics_step)
+                        row["delta_hp_self"] = float(delta_hp_self)
+                        row["delta_hp_oppo"] = float(delta_hp_oppo)
+                        row["step"] = float(len(step_series))
+                        step_series.append(row)
 
                     if terminated:
                         episode_done = True
@@ -143,6 +189,70 @@ class Evaluator:
 
                         avg_hp += env_info.get("HP_self", 0)
                         avg_hp_oppo += env_info.get("HP_oppo", 0)
+
+                        # Aggregate extended episode metrics (no timeseries saved)
+                        if step_series:
+                            gun_series = np.array([r.get("gun_opportunity", 0.0) for r in step_series], dtype=np.float32)
+                            gun_series_oppo = np.array([r.get("gun_opportunity_oppo", 0.0) for r in step_series], dtype=np.float32)
+                            overshoot_series = np.array([r.get("overshoot_flag", 0.0) for r in step_series], dtype=np.float32)
+
+                            track_angle_series = np.array([r.get("track_angle_rad", 0.0) for r in step_series], dtype=np.float32)
+                            track_angle_series_oppo = np.array([r.get("oppo_track_angle_rad", 0.0) for r in step_series], dtype=np.float32)
+
+                            hp_self_series = np.array([r.get("hp_self", 0.0) for r in step_series], dtype=np.float32)
+                            hp_oppo_series = np.array([r.get("hp_oppo", 0.0) for r in step_series], dtype=np.float32)
+
+                            dhp_oppo = np.diff(hp_oppo_series, prepend=hp_oppo_series[0])
+                            damage_to_oppo_total = float(np.sum(np.maximum(0.0, -dhp_oppo)))
+                            dhp_self = np.diff(hp_self_series, prepend=hp_self_series[0])
+                            damage_to_self_total = float(np.sum(np.maximum(0.0, -dhp_self)))
+
+                            episode_steps = len(step_series)
+                            step_hz = None
+                            if env_cfg is not None:
+                                step_hz = env_cfg.get("agent_interaction_freq") or env_cfg.get("step_frequency_hz")
+                            episode_time = float(episode_steps / float(step_hz)) if step_hz else float(episode_steps)
+
+                            gun_time_ratio = float(np.mean(gun_series)) if gun_series.size else 0.0
+                            gun_time_ratio_oppo = float(np.mean(gun_series_oppo)) if gun_series_oppo.size else 0.0
+                            overshoot_time_ratio = float(np.mean(overshoot_series)) if overshoot_series.size else 0.0
+
+                            track_angle_mean = float(np.mean(track_angle_series)) if track_angle_series.size else 0.0
+                            track_angle_mean_oppo = float(np.mean(track_angle_series_oppo)) if track_angle_series_oppo.size else 0.0
+
+                            g_ft = 32.174
+                            u = np.array([r.get("u_fps", 0.0) for r in step_series], dtype=np.float32)
+                            h = np.array([r.get("altitude_sl_ft", 0.0) for r in step_series], dtype=np.float32)
+                            ou = np.array([r.get("oppo_u_fps", 0.0) for r in step_series], dtype=np.float32)
+                            oh = np.array([r.get("oppo_altitude_sl_ft", 0.0) for r in step_series], dtype=np.float32)
+                            es = h + (u * u) / (2.0 * g_ft)
+                            oes = oh + (ou * ou) / (2.0 * g_ft)
+                            # specific energy (not difference): Es = h + u^2/(2g)
+                            g_ft = 32.174
+                            u = np.array([r.get("u_fps", 0.0) for r in step_series], dtype=np.float32)
+                            h = np.array([r.get("altitude_sl_ft", 0.0) for r in step_series], dtype=np.float32)
+                            ou = np.array([r.get("oppo_u_fps", 0.0) for r in step_series], dtype=np.float32)
+                            oh = np.array([r.get("oppo_altitude_sl_ft", 0.0) for r in step_series], dtype=np.float32)
+                            es = h + (u * u) / (2.0 * g_ft)
+                            oes = oh + (ou * ou) / (2.0 * g_ft)
+
+                            specific_energy_mean = float(np.mean(es)) if es.size else 0.0
+                            specific_energy_final = float(es[-1]) if es.size else 0.0
+                            specific_energy_mean_oppo = float(np.mean(oes)) if oes.size else 0.0
+                            specific_energy_final_oppo = float(oes[-1]) if oes.size else 0.0
+
+                            gun_time_ratios.append(gun_time_ratio)
+                            overshoot_time_ratios.append(overshoot_time_ratio)
+                            track_angle_means.append(track_angle_mean)
+                            damage_to_oppo_totals.append(damage_to_oppo_total)
+                            delta_specific_energy_means.append(specific_energy_mean)
+                            delta_specific_energy_finals.append(specific_energy_final)
+
+                            gun_time_ratios_oppo.append(gun_time_ratio_oppo)
+                            track_angle_means_oppo.append(track_angle_mean_oppo)
+                            damage_to_self_totals.append(damage_to_self_total)
+                            delta_specific_energy_means_oppo.append(specific_energy_mean_oppo)
+                            delta_specific_energy_finals_oppo.append(specific_energy_final_oppo)
 
             # Calculate statistics
             win_rate = wins / n_episodes
@@ -179,6 +289,25 @@ class Evaluator:
             "avg_reward": avg_reward,
             "avg_hp": avg_hp,
             "avg_hp_oppo": avg_hp_oppo,
+
+            # model1 (self) metrics
+            "gun_opportunity_time_ratio": float(np.mean(gun_time_ratios)) if gun_time_ratios else 0.0,
+            "damage_to_oppo_total": float(np.mean(damage_to_oppo_totals)) if damage_to_oppo_totals else 0.0,
+            "damage_rate": float(np.mean(damage_rates)) if damage_rates else 0.0,
+            "track_angle_mean": float(np.mean(track_angle_means)) if track_angle_means else 0.0,
+            "adverse_angle_mean": float(np.mean(adverse_angle_means)) if adverse_angle_means else 0.0,
+            "overshoot_time_ratio": float(np.mean(overshoot_time_ratios)) if overshoot_time_ratios else 0.0,
+            "specific_energy_mean": float(np.mean(delta_specific_energy_means)) if delta_specific_energy_means else 0.0,
+            "specific_energy_final": float(np.mean(delta_specific_energy_finals)) if delta_specific_energy_finals else 0.0,
+
+            # model2 (opponent) metrics
+            "gun_opportunity_time_ratio_oppo": float(np.mean(gun_time_ratios_oppo)) if gun_time_ratios_oppo else 0.0,
+            "damage_to_self_total": float(np.mean(damage_to_self_totals)) if damage_to_self_totals else 0.0,
+            "damage_rate_oppo": float(np.mean(damage_rates_oppo)) if damage_rates_oppo else 0.0,
+            "track_angle_mean_oppo": float(np.mean(track_angle_means_oppo)) if track_angle_means_oppo else 0.0,
+            "adverse_angle_mean_oppo": float(np.mean(adverse_angle_means_oppo)) if adverse_angle_means_oppo else 0.0,
+            "specific_energy_mean_oppo": float(np.mean(delta_specific_energy_means_oppo)) if delta_specific_energy_means_oppo else 0.0,
+            "specific_energy_final_oppo": float(np.mean(delta_specific_energy_finals_oppo)) if delta_specific_energy_finals_oppo else 0.0,
         }
 
     @staticmethod
@@ -212,6 +341,17 @@ class Evaluator:
         with open(result_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(payload, f, allow_unicode=True, sort_keys=False)
         logging.info("Evaluation results saved to %s", result_path)
+
+        # Also generate a summary figure for quick comparison across opponents
+        try:
+            from src.evaluation.plot_eval_summary import plot_opponent_metrics
+
+            fig_path = os.path.join(base_path, "evaluation_summary.png")
+            plot_opponent_metrics(opponents, fig_path, overall_average=overall_average)
+            logging.info("Evaluation summary figure saved to %s", fig_path)
+        except Exception as e:
+            logging.warning("Failed to generate evaluation summary figure: %s", e)
+
         return result_path
 
     @classmethod
