@@ -69,52 +69,68 @@ class SensorPerturbationWrapper(gym.ObservationWrapper):
         N = int(mask.shape[0])
         total_dim = int(out.shape[-1])
 
-        # Decide which slice corresponds to the agent half
-        if total_dim == 2 * N:
-            sl = slice(0, N)
-            mask_eff = mask
-        elif total_dim == N:
-            sl = slice(0, N)
-            mask_eff = mask
-        else:
-            # If obs_config/exclude changed dims, align conservatively
-            N_eff = min(N, total_dim // 2 if total_dim % 2 == 0 else total_dim)
-            sl = slice(0, N_eff)
-            mask_eff = mask[:N_eff]
+        def _apply_perturb(x: np.ndarray, sel_mask: np.ndarray) -> np.ndarray:
+            """Apply missing + relative noise in-place on x for selected dims."""
+            if x.ndim == 1:
+                sel = sel_mask
+                if self.missing_prob > 0.0:
+                    miss = (self._rng.random(x.shape[0]) < self.missing_prob) & sel
+                    x[miss] = 0
+                    sel_non_missing = sel & (~miss)
+                else:
+                    sel_non_missing = sel
 
-        if out.ndim == 1:
-            agent = out[sl]
+                if self.rel_error_std > 0.0 and np.any(sel_non_missing):
+                    noise = self._rng.normal(0.0, self.rel_error_std, size=x.shape[0])
+                    x[sel_non_missing] = x[sel_non_missing] * (1.0 + noise[sel_non_missing])
+                return x
 
-            sel = mask_eff
+            # x.ndim == 2
+            sel2 = np.broadcast_to(sel_mask, x.shape)
             if self.missing_prob > 0.0:
-                miss = (self._rng.random(agent.shape[0]) < self.missing_prob) & sel
-                agent[miss] = 0
-                sel_non_missing = sel & (~miss)
-            else:
-                sel_non_missing = sel
-
-            if self.rel_error_std > 0.0 and np.any(sel_non_missing):
-                noise = self._rng.normal(0.0, self.rel_error_std, size=agent.shape[0])
-                agent[sel_non_missing] = agent[sel_non_missing] * (1.0 + noise[sel_non_missing])
-
-            out[sl] = agent
-
-        else:
-            agent = out[:, sl]
-            sel2 = np.broadcast_to(mask_eff, agent.shape)
-
-            if self.missing_prob > 0.0:
-                miss = (self._rng.random(agent.shape) < self.missing_prob) & sel2
-                agent[miss] = 0
+                miss = (self._rng.random(x.shape) < self.missing_prob) & sel2
+                x[miss] = 0
                 sel_non_missing2 = sel2 & (~miss)
             else:
                 sel_non_missing2 = sel2
 
             if self.rel_error_std > 0.0 and np.any(sel_non_missing2):
-                noise = self._rng.normal(0.0, self.rel_error_std, size=agent.shape)
-                agent[sel_non_missing2] = agent[sel_non_missing2] * (1.0 + noise[sel_non_missing2])
+                noise = self._rng.normal(0.0, self.rel_error_std, size=x.shape)
+                x[sel_non_missing2] = x[sel_non_missing2] * (1.0 + noise[sel_non_missing2])
+            return x
 
-            out[:, sl] = agent
+        # Decide slices for agent/opponent halves (if present)
+        if total_dim == 2 * N:
+            sl_agent = slice(0, N)
+            sl_oppo = slice(N, 2 * N)
+            mask_eff_agent = mask
+            mask_eff_oppo = mask
+        elif total_dim == N:
+            sl_agent = slice(0, N)
+            sl_oppo = None
+            mask_eff_agent = mask
+            mask_eff_oppo = None
+        else:
+            # If obs_config/exclude changed dims, align conservatively
+            if total_dim % 2 == 0:
+                N_eff = min(N, total_dim // 2)
+                sl_agent = slice(0, N_eff)
+                sl_oppo = slice(N_eff, 2 * N_eff)
+            else:
+                N_eff = min(N, total_dim)
+                sl_agent = slice(0, N_eff)
+                sl_oppo = None
+            mask_eff_agent = mask[:N_eff]
+            mask_eff_oppo = mask[:N_eff] if sl_oppo is not None else None
+
+        if out.ndim == 1:
+            _apply_perturb(out[sl_agent], mask_eff_agent)
+            if sl_oppo is not None and mask_eff_oppo is not None:
+                _apply_perturb(out[sl_oppo], mask_eff_oppo)
+        else:
+            _apply_perturb(out[:, sl_agent], mask_eff_agent)
+            if sl_oppo is not None and mask_eff_oppo is not None:
+                _apply_perturb(out[:, sl_oppo], mask_eff_oppo)
 
         # print(f"SensorPerturbationWrapper: missing_prob={self.missing_prob}, rel_error_std={self.rel_error_std}, "
         #       f"num_perturbed={np.sum(sel)}, num_missing={np.sum(miss) if self.missing_prob > 0.0 else 0}")
