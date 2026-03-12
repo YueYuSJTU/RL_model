@@ -96,12 +96,17 @@ class UnifiedTrainer:
             logging.info(f"Resuming training in existing directory: '{self.train_path}'")
         else:
             home_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_root = next(iter(self.full_config.values()))['log_root']
+            # Determine log_root from first stage config (stage keys only)
+            first_stage_key = self.stage_keys[0] if self.stage_keys else None
+            if not first_stage_key:
+                raise ValueError("No stage* entries found in config")
+            log_root = self.full_config[first_stage_key]["log_root"]
             exp = _sanitize_exp_name(self.exp_name)
             folder = home_timestamp if exp == "" else f"{home_timestamp}_{exp}"
             self.train_path = os.path.join(log_root, folder)
             os.makedirs(self.train_path, exist_ok=True)
             logging.info(f"Starting new training run in: '{self.train_path}'")
+            save_config(self.full_config, self.train_path, "full_config.yaml")
 
     def _setup_experiment_opponent_pool(self, cfg: Dict[str, Any]) -> str:
         if not isinstance(cfg, dict):
@@ -189,19 +194,47 @@ class UnifiedTrainer:
     def _run_normal_stage(self, stage_cfg: Dict[str, Any], stage_path: str, stage_key: str):
         """Executes a standard training stage."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        env_name = stage_cfg['env']
-        agent_name = stage_cfg['agent']
-        exp_path = os.path.join(stage_path, f"{timestamp}_{env_name}_{agent_name}")
+        # For naming, allow agent to be dict; fall back to stage_key.
+        env_name = stage_cfg.get('env')
+        agent_name = stage_cfg.get('agent')
+        env_tag = env_name if isinstance(env_name, str) else (env_name.get('shape') if isinstance(env_name, dict) else stage_key)
+        agent_tag = agent_name if isinstance(agent_name, str) else (agent_name.get('name') if isinstance(agent_name, dict) else "agent")
+        exp_path = os.path.join(stage_path, f"{timestamp}_{env_tag}_{agent_tag}")
 
         logger = setup_logger(exp_path)
 
-        # --- Load configs ---
-        env_cfg = load_config(os.path.join("configs", "env", f"{env_name}.yaml"))
-        agent_cfg = load_config(os.path.join("configs", "agent", f"{agent_name}.yaml"))
+        # --- Load configs (unified with shared sections) ---
+        # Supported structure:
+        # - top-level: agent / env_base
+        # - per-stage: env (merged over env_base) and optional agent override
+        base_env = self.full_config.get("env_base") or {}
+        stage_env = stage_cfg.get("env") or {}
+        if not isinstance(stage_env, dict):
+            raise ValueError("stage.env must be dict in unified config")
+        if isinstance(base_env, dict):
+            env_cfg = dict(base_env)
+            env_cfg.update(stage_env)
+        else:
+            env_cfg = dict(stage_env)
+
+        base_agent = self.full_config.get("agent") or {}
+        stage_agent = stage_cfg.get("agent") or {}
+        if not isinstance(stage_agent, dict):
+            # backward-compatible: allow string agent id
+            stage_agent = {"name": stage_agent}
+        if isinstance(base_agent, dict):
+            agent_cfg = dict(base_agent)
+            agent_cfg.update(stage_agent)
+        else:
+            agent_cfg = dict(stage_agent)
 
         save_config(stage_cfg, exp_path, "stage_config.yaml")
         save_config(agent_cfg, exp_path, "agent_config.yaml")
         save_config(env_cfg, exp_path, "env_config.yaml")
+
+        # Remove non-SB3 keys before passing into PPO(...)
+        agent_cfg_for_sb3 = dict(agent_cfg)
+        agent_cfg_for_sb3.pop("name", None)
 
         # --- Create Environments ---
         vec_env_kwargs = {"pool_roots": self.pool_path}
@@ -218,7 +251,7 @@ class UnifiedTrainer:
         if stage_num > 1 and self.last_best_model_path:
             logger.info(f"Loading model from previous stage: {self.last_best_model_path}")
             self.model = load_agent(
-                env=train_env, agent_class=agent_name,
+                env=train_env, agent_class=agent_cfg.get("name", agent_tag),
                 path=self.last_best_model_path, device=agent_cfg["device"]
             )
         elif self.pretrained_path and stage_num == 1:
@@ -226,16 +259,16 @@ class UnifiedTrainer:
             latest_stage_dir = self._find_latest_training_result(self.pretrained_path)
             logger.info(f"Fine-tuning from {latest_stage_dir}")
             self.model = load_agent(
-                env=train_env, agent_class=agent_name,
+                env=train_env, agent_class=agent_cfg.get("name", agent_tag),
                 path=os.path.join(latest_stage_dir, "best_model"),
                 device=agent_cfg["device"]
             )
         else:
             logger.info("Creating new model for the first stage.")
             self.model = creat_agent(
-                env=train_env, agent_class=agent_name,
+                env=train_env, agent_class=agent_cfg.get("name", agent_tag),
                 tensorboard_log=os.path.join(self.train_path, "tensorboard", timestamp),
-                agent_cfg=agent_cfg
+                agent_cfg=agent_cfg_for_sb3
             )
 
         # --- Callbacks and Training ---
@@ -282,9 +315,27 @@ class UnifiedTrainer:
         if isinstance(self.opponent_pool_cfg, dict) and self.opponent_pool_cfg.get("max_pool_size") is not None:
             self.pool_manager.max_pool_size = int(self.opponent_pool_cfg["max_pool_size"])
 
-        # --- Load configs ---
-        env_cfg = load_config(os.path.join("configs", "env", f"{stage_cfg['env']}.yaml"))
-        agent_cfg = load_config(os.path.join("configs", "agent", f"{stage_cfg['agent']}.yaml"))
+        # --- Load configs (unified with shared sections) ---
+        base_env = self.full_config.get("env_base") or {}
+        stage_env = stage_cfg.get("env") or {}
+        if not isinstance(stage_env, dict):
+            raise ValueError("stage.env must be dict in unified config")
+        if isinstance(base_env, dict):
+            env_cfg = dict(base_env)
+            env_cfg.update(stage_env)
+        else:
+            env_cfg = dict(stage_env)
+
+        base_agent = self.full_config.get("agent") or {}
+        stage_agent = stage_cfg.get("agent") or {}
+        if not isinstance(stage_agent, dict):
+            # backward-compatible: allow string agent id
+            stage_agent = {"name": stage_agent}
+        if isinstance(base_agent, dict):
+            agent_cfg = dict(base_agent)
+            agent_cfg.update(stage_agent)
+        else:
+            agent_cfg = dict(stage_agent)
 
         # --- Create Environment with Opponent Pool ---
         logger.info(f"Creating training environment with opponent pool: {self.pool_path}")
@@ -299,7 +350,7 @@ class UnifiedTrainer:
 
         logger.info(f"Loading model for battle training: {self.last_best_model_path}")
         self.model = load_agent(
-            env=train_env, agent_class=stage_cfg['agent'],
+            env=train_env, agent_class=agent_cfg.get("name", "ppo"),
             path=self.last_best_model_path, device=agent_cfg["device"]
         )
 
@@ -335,6 +386,9 @@ class UnifiedTrainer:
 
                 save_config(stage_cfg, cycle_path, "train_config.yaml")
                 save_config(agent_cfg, cycle_path, "agent_config.yaml")
+
+                agent_cfg_for_sb3 = dict(agent_cfg)
+                agent_cfg_for_sb3.pop("name", None)
                 save_config(env_cfg, cycle_path, "env_config.yaml")
 
                 # === Create cycle-specific EvalCallback ===

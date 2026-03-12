@@ -1,0 +1,71 @@
+# 合一配置（紧凑版）：将重复的 agent 与 env 公共部分提到 stage 外
+
+# 所有 stage 共享的 agent 配置
+agent:
+  name: ppo_1layer
+  policy: "MlpPolicy"
+  learning_rate: 1.0e-4
+  device: "cuda"
+  verbose: 0
+  n_steps: 2048
+  batch_size: 128
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  clip_range_vf: null
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  policy_kwargs:
+    share_features_extractor: True
+    net_arch:
+      - 12288
+
+# 所有 stage 共享的 env 公共部分（stage 内只需要覆写 shape 等少数字段）
+env_base:
+  plane: "F16"
+  task: "TrackingTask"
+  render_mode: null
+  use_vec_normalize: False
+  norm_obs: False
+  norm_reward: False
+  clip_obs: 10.0
+  wrappers:
+    - name: "src.environments.sensor_wrapper:SensorPerturbationWrapper"
+      kwargs:
+        missing_prob: 0.05
+        rel_error_std: 0.02
+        prefixes: ["target/", "oppo/"]
+
+stage1:
+  total_timesteps: 300_000
+  eval_freq: 1000
+  log_root: "./experiments"
+  seed: 42
+  num_cpu: 30
+  env:
+    shape: "stage1"
+
+stage2:
+  eval_freq: 50000
+  log_root: "./experiments"
+  seed: 42
+  num_cpu: 30
+
+  # --- Battle Training Parameters (triggers battle mode for this last stage) ---
+  battle_step: 10_000_000
+  battle_cycles: 30
+  n_episodes_eval: 50
+  threshold_timesteps: 20_000_000
+  update_freq_episodes: 1000
+
+  env:
+    shape: "stage2"
+
+opponent_pool:
+  base_dir: "./base_opponent_model"
+  opponents: ["1", "2", "3"]
+  whitelist: ["1", "2", "3"]
+  pool_subdir: "opponent_pool"
+  max_pool_size: 4

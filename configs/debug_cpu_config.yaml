@@ -1,7 +1,43 @@
 # 阶段训练通用配置
+agent:
+  name: ppo_1layer
+  policy: "MlpPolicy"
+  learning_rate: 1.0e-4
+  device: "cuda"
+  verbose: 0
+  n_steps: 2048
+  batch_size: 128
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  clip_range_vf: null
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  policy_kwargs:
+    share_features_extractor: True
+    net_arch:
+      - 12288
+
+env_base:
+  plane: "F16"
+  task: "TrackingTask"
+  render_mode: null
+  use_vec_normalize: False
+  norm_obs: False
+  norm_reward: False
+  clip_obs: 10.0
+  wrappers:
+    - name: "src.environments.sensor_wrapper:SensorPerturbationWrapper"
+      kwargs:
+        missing_prob: 0.05
+        rel_error_std: 0.02
+        prefixes: ["target/", "oppo/"]
+
 stage1:
-  agent: ppo_1layer
-  env: f16_tracking_stage1
+  env:
+    shape: "stage1"
   total_timesteps: 100_000
   eval_freq: 1000
   log_root: "./experiments"
