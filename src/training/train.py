@@ -232,9 +232,23 @@ class UnifiedTrainer:
         save_config(agent_cfg, exp_path, "agent_config.yaml")
         save_config(env_cfg, exp_path, "env_config.yaml")
 
-        # Remove non-SB3 keys before passing into PPO(...)
+        # Remove non-SB3 keys before passing into SB3 Algo(...)
         agent_cfg_for_sb3 = dict(agent_cfg)
         agent_cfg_for_sb3.pop("name", None)
+        algo_name = agent_cfg_for_sb3.get("algorithm", None)
+        if algo_name is None:
+            raise ValueError("Missing required top-level agent.algorithm in unified config")
+
+        # If stage agent tag is generic ("agent"), use algorithm name as agent_class so factory can resolve.
+        resolved_agent_class = agent_cfg.get("name", agent_tag)
+        if str(resolved_agent_class) == "agent" or resolved_agent_class is None:
+            resolved_agent_class = str(algo_name)
+
+        # Print algorithm for verification
+        logging.info(f"[algorithm] Using {algo_name}")
+
+        # Also make sure the algo key is available to the agent factory, since it selects PPO vs RecurrentPPO.
+        agent_cfg_for_sb3["algorithm"] = algo_name
 
         # --- Create Environments ---
         vec_env_kwargs = {"pool_roots": self.pool_path}
@@ -251,24 +265,30 @@ class UnifiedTrainer:
         if stage_num > 1 and self.last_best_model_path:
             logger.info(f"Loading model from previous stage: {self.last_best_model_path}")
             self.model = load_agent(
-                env=train_env, agent_class=agent_cfg.get("name", agent_tag),
-                path=self.last_best_model_path, device=agent_cfg["device"]
+                env=train_env,
+                agent_class=agent_cfg.get("name", agent_tag),
+                path=self.last_best_model_path,
+                device=agent_cfg["device"],
+                agent_cfg=agent_cfg,
             )
         elif self.pretrained_path and stage_num == 1:
             # Fine-tuning mode
             latest_stage_dir = self._find_latest_training_result(self.pretrained_path)
             logger.info(f"Fine-tuning from {latest_stage_dir}")
             self.model = load_agent(
-                env=train_env, agent_class=agent_cfg.get("name", agent_tag),
+                env=train_env,
+                agent_class=agent_cfg.get("name", agent_tag),
                 path=os.path.join(latest_stage_dir, "best_model"),
-                device=agent_cfg["device"]
+                device=agent_cfg["device"],
+                agent_cfg=agent_cfg,
             )
         else:
             logger.info("Creating new model for the first stage.")
             self.model = creat_agent(
-                env=train_env, agent_class=agent_cfg.get("name", agent_tag),
+                env=train_env,
+                agent_class=resolved_agent_class,
                 tensorboard_log=os.path.join(self.train_path, "tensorboard", timestamp),
-                agent_cfg=agent_cfg_for_sb3
+                agent_cfg=agent_cfg_for_sb3,
             )
 
         # --- Callbacks and Training ---
@@ -350,8 +370,11 @@ class UnifiedTrainer:
 
         logger.info(f"Loading model for battle training: {self.last_best_model_path}")
         self.model = load_agent(
-            env=train_env, agent_class=agent_cfg.get("name", "ppo"),
-            path=self.last_best_model_path, device=agent_cfg["device"]
+            env=train_env,
+            agent_class=agent_cfg.get("name", "ppo"),
+            path=self.last_best_model_path,
+            device=agent_cfg["device"],
+            agent_cfg=agent_cfg,
         )
 
         # --- Initialize persistent callbacks ---

@@ -102,6 +102,13 @@ class PoolManager:
         
         # 复制整个文件夹
         shutil.copytree(new_model_path, destination_path)
+
+        # Ensure agent_config.yaml exists in pool entry for algorithm resolution.
+        src_agent_cfg = os.path.join(new_model_path, "agent_config.yaml")
+        dst_agent_cfg = os.path.join(destination_path, "agent_config.yaml")
+        if os.path.exists(src_agent_cfg) and not os.path.exists(dst_agent_cfg):
+            shutil.copy2(src_agent_cfg, dst_agent_cfg)
+
         logging.info(f"模型从 '{new_model_path}' 完整复制到 '{destination_path}' 成功。")
 
 

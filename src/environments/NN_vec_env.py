@@ -9,6 +9,8 @@ from typing import Callable, List, Optional, Tuple, Sequence, Union
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize, SubprocVecEnv
 from stable_baselines3.common.vec_env.subproc_vec_env import _worker
 from stable_baselines3 import PPO
+
+from src.agents.make_agent import load_agent
 from stable_baselines3.common.vec_env.base_vec_env import (
     CloudpickleWrapper,
     VecEnv,
@@ -276,7 +278,26 @@ class NNVecEnv(SubprocVecEnv):
         # 加载模型，不使用custom_objects，因为这会导致网络结构不匹配
         # 我们需要让PPO.load使用模型保存时的原始观察空间
         # ObsAdaptingModel会在predict时处理观察空间的映射
-        model = PPO.load(model_file, device="cuda")
+        # Load algorithm from agent_config.yaml if present (backward compatible: default PPO)
+        agent_cfg_path = os.path.join(model_path, "agent_config.yaml")
+        agent_cfg = {}
+        if os.path.exists(agent_cfg_path):
+            import yaml
+
+            with open(agent_cfg_path, encoding="utf-8") as f:
+                agent_cfg = yaml.safe_load(f) or {}
+
+        # Important: do NOT pass current env here.
+        # The pool models were trained with full observation/action spaces (double env),
+        # while NNVecEnv exposes half spaces to the main agent. Passing env would cause
+        # SB3 to validate spaces and fail.
+        model = load_agent(
+            env=None,
+            agent_class=agent_cfg.get("algorithm", "PPO"),
+            path=model_file,
+            device=str(agent_cfg.get("device", "cuda")),
+            agent_cfg=agent_cfg,
+        )
 
         # 关闭环境释放资源
         vec_env.close()
@@ -328,7 +349,9 @@ class NNVecEnv(SubprocVecEnv):
 
             # 使用包装后的模型进行预测，包装器内部会处理观察适配
             try:
-                strategy_actions, _ = wrapped_model.predict(strategy_obs)
+                # Opponent is always stateless: reset recurrent state every step
+                episode_start = np.ones((strategy_obs.shape[0],), dtype=bool)
+                strategy_actions, _ = wrapped_model.predict(strategy_obs, state=None, episode_start=episode_start)
                 # 将动作放回对应位置
                 actions[env_indices] = strategy_actions
             except Exception as e:

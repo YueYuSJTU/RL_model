@@ -81,12 +81,27 @@ class ComponentEvalCallback(EvalCallback):
         # 运行指定次数的评估episode
         for _ in range(self.n_eval_episodes):
             obs = self.eval_env.reset()
-            done = False
             episode_components = defaultdict(list)
-            
-            while not done:
-                action = self.model.predict(obs, deterministic=self.deterministic)[0]
-                obs, _, done, infos = self.eval_env.step(action)
+
+            n_envs = getattr(self.eval_env, "num_envs", 1)
+            state = None
+            episode_start = np.ones((n_envs,), dtype=bool)
+            dones = np.array([False] * n_envs, dtype=bool)
+
+            while not np.any(dones):
+                try:
+                    action, state = self.model.predict(
+                        obs,
+                        state=state,
+                        episode_start=episode_start,
+                        deterministic=self.deterministic,
+                    )
+                except TypeError:
+                    # Non-recurrent models (e.g., PPO) do not accept state/episode_start
+                    action = self.model.predict(obs, deterministic=self.deterministic)[0]
+
+                obs, _, dones, infos = self.eval_env.step(action)
+                episode_start = dones
                 
                 # 收集分项奖励值
                 for info in infos:  # 处理向量化环境，实际上只会运行一次

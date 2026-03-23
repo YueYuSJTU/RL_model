@@ -6,8 +6,9 @@ import torch
 import gc
 from typing import Dict, Tuple, List, Optional
 from tqdm import tqdm
-from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
+
+from src.agents.make_agent import load_agent
 
 from src.environments.make_env import create_env
 from src.utils.serialization import load_config
@@ -70,21 +71,26 @@ class Evaluator:
             agent1_cfg = load_config(os.path.join(model1_path, "agent_config.yaml"))
             env1_cfg = load_config(os.path.join(model1_path, "env_config.yaml"))
             fake_env1 = create_env(env1_cfg, training=False, vec_env_kwargs=None)
-            model1 = PPO.load(
-                os.path.join(model1_path, "best_model"),
+            model1 = load_agent(
                 env=fake_env1,
-                device=agent1_cfg["device"]
+                agent_class=agent1_cfg.get("algorithm", "PPO"),
+                path=os.path.join(model1_path, "best_model"),
+                device=agent1_cfg["device"],
+                agent_cfg=agent1_cfg,
             )
+            print(f"debug: model1 class is {model1.__class__}")
             model1 = ObsAdaptingModel(model1, env1_cfg)
 
         # Initialize Agent 2 (Model)
         agent2_cfg = load_config(os.path.join(model2_path, "agent_config.yaml"))
         env2_cfg = load_config(os.path.join(model2_path, "env_config.yaml"))
         fake_env2 = create_env(env2_cfg, training=False, vec_env_kwargs=None)
-        model2 = PPO.load(
-            os.path.join(model2_path, "best_model"),
+        model2 = load_agent(
             env=fake_env2,
-            device=agent2_cfg["device"]
+            agent_class=agent2_cfg.get("algorithm", "PPO"),
+            path=os.path.join(model2_path, "best_model"),
+            device=agent2_cfg["device"],
+            agent_cfg=agent2_cfg,
         )
         model2 = ObsAdaptingModel(model2, env2_cfg)
 
@@ -130,6 +136,10 @@ class Evaluator:
                 episode_done = False
                 episode_reward = 0
 
+                # recurrent state for agent1 only
+                state1 = None
+                episode_start1 = np.ones((vec_env.num_envs,), dtype=bool)
+
                 # per-episode step metrics collection
                 step_series: List[Dict[str, float]] = []
                 prev_hp_self: Optional[float] = None
@@ -143,11 +153,20 @@ class Evaluator:
                         action1, _ = manual_agent.predict(None)
                         action1[:, -1] = np.abs(action1[:, -1])
                     else:
-                        action1, _ = model1.predict(obs[:, :obs_length//2], deterministic=True)
+                        try:
+                            action1, state1 = model1.predict(
+                                obs[:, :obs_length//2],
+                                state=state1,
+                                episode_start=episode_start1,
+                                deterministic=True,
+                            )
+                        except TypeError:
+                            action1, _ = model1.predict(obs[:, :obs_length//2], deterministic=True)
 
                     action2, _ = model2.predict(obs[:, obs_length//2:], deterministic=True)
                     combined_action = np.concatenate([action1, action2], axis=-1)
-                    obs, reward, terminated, info = vec_env.step(combined_action)
+                    obs, reward, dones, info = vec_env.step(combined_action)
+                    episode_start1 = dones
 
                     episode_reward += reward[0]
 
@@ -171,7 +190,7 @@ class Evaluator:
                         row["step"] = float(len(step_series))
                         step_series.append(row)
 
-                    if terminated:
+                    if bool(dones[0]):
                         episode_done = True
                         total_rewards.append(episode_reward)
                         env_info = info[0].get("env_info", {})
