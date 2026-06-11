@@ -8,6 +8,10 @@ opponent_pool/
 base_opponent_model/
 condaenv*
 .output*
+*.npz
+*.pth
+*.png
+*.csv
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

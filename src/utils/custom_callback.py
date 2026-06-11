@@ -146,11 +146,14 @@ class EpisodeCurriculumCallback(BaseCallback):
         # 内部状态
         self.episode_count = 0
         self.last_update_prob = 1.0
-        self.is_active = True  # 关键：Callback的活动状态标志
+        self.is_active = self.threshold_timesteps > 0  # 关键：如果 threshold_timesteps 为 0，则初始化为休眠状态
 
         if self.verbose > 0:
             logging.info("通用课程学习Callback已初始化。")
-            logging.info(f"阈值: {self.threshold_timesteps}步, 更新频率: 每 {self.update_freq_episodes} 个 episodes")
+            if self.is_active:
+                logging.info(f"阈值: {self.threshold_timesteps}步, 更新频率: 每 {self.update_freq_episodes} 个 episodes")
+            else:
+                logging.info("阈值为 0，Callback 将保持休眠模式。")
 
     def _on_step(self) -> bool:
         """

@@ -71,8 +71,10 @@
 python -m src.training.train \
     --config "configs/battle_train_config.yaml" \
     --pool_path "./opponent_pool/test_pool" \
-    --pretrained_path "experiments/20250921_162658"
+    --pretrained_path "experiments/20250921_162658" \
+    --exp_name test
 ```
+注：pool path可以省略，因为config里的opponent model参数会覆盖
 
 - **预训练模式**: 省略 `--pretrained_path` 参数。脚本将自动创建一个以当前日期和时间命名的文件夹（如 `experiments/YYYYMMDD_HHMMSS/`）来保存训练记录。
 - **微调模式**: 提供 `--pretrained_path` 参数，指定一个已有的实验目录。脚本会自动加载该目录下的模型进行微调。

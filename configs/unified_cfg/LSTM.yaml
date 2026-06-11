@@ -53,12 +53,12 @@ env_base:
   norm_obs: False
   norm_reward: False
   clip_obs: 10.0
-  wrappers:
-    - name: "src.environments.sensor_wrapper:SensorPerturbationWrapper"
-      kwargs:
-        missing_prob: 0.05
-        rel_error_std: 0.02
-        prefixes: ["target/", "oppo/"]
+  # wrappers:
+  #   - name: "src.environments.sensor_wrapper:SensorPerturbationWrapper"
+  #     kwargs:
+  #       missing_prob: 0
+  #       rel_error_std: 0
+  #       prefixes: ["target/", "oppo/"]
 
 stage1:
   total_timesteps: 300_000
@@ -77,7 +77,7 @@ stage2:
 
   # --- Battle Training Parameters (triggers battle mode for this last stage) ---
   battle_step: 10_000_000
-  battle_cycles: 45
+  battle_cycles: 30
   n_episodes_eval: 50
   threshold_timesteps: 20_000_000
   update_freq_episodes: 1000

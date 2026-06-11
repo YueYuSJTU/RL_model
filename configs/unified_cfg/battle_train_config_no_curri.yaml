@@ -39,17 +39,21 @@ env_base:
   #       rel_error_std: 0.02
   #       prefixes: ["target/", "oppo/"]
 
-stage1:
-  total_timesteps: 300_000
-  eval_freq: 1000
-  log_root: "./experiments"
-  seed: 42
-  num_cpu: 30
-  env:
-    shape: "stage1"
+# stage1:
+#   total_timesteps: 300_000
+#   eval_freq: 1000
+#   log_root: "./experiments"
+#   seed: 42
+#   num_cpu: 30
+#   env:
+#     shape: "stage1"
 
-stage2:
+# 请注意，需要在环境中同步调整stage2的奖励函数为stage1
+# 另外threshold_timesteps控制第二维度的课程学习，如果取消，则默认填充0
+# 为了保险，我把环境中的初始prob也改为了0，以确保去除课程学习，后面记得改回来
+stage1:
   eval_freq: 50000
+  # total_timesteps: 300_000_000
   log_root: "./experiments"
   seed: 42
   num_cpu: 30
@@ -57,16 +61,28 @@ stage2:
   # --- Battle Training Parameters (triggers battle mode for this last stage) ---
   battle_step: 10_000_000
   battle_cycles: 30
-  n_episodes_eval: 2
-  threshold_timesteps: 20_000_000
-  update_freq_episodes: 1000
+  n_episodes_eval: 50
+  # threshold_timesteps: 20_000_000
+  # update_freq_episodes: 1000
 
   env:
-    shape: "stage2"
+    shape: "stage1"
 
+# opponent_pool:
+#   base_dir: "opponent_pool/pool2"
+#   opponents: ["3", "7", "11", "12", "16", "17"]
+#   whitelist: ["3", "7", "11", "12", "16", "17"]
+#   pool_subdir: "opponent_pool"
+#   max_pool_size: 6
+# opponent_pool:
+#   base_dir: "opponent_pool/pool1"
+#   opponents: ["1", "2", "3", "4", "5"]
+#   whitelist: ["1", "2", "3", "4", "5"]
+#   pool_subdir: "opponent_pool"
+#   max_pool_size: 5
 opponent_pool:
   base_dir: "./base_opponent_model"
-  opponents: ["1"]
-  whitelist: ["1"]
+  opponents: ["1", "2", "3"]
+  whitelist: ["1", "2", "3"]
   pool_subdir: "opponent_pool"
-  max_pool_size: 1
+  max_pool_size: 4

@@ -212,10 +212,10 @@ class TrackingTask(FlightTask):
     INITIAL_HEADING_DEG = 0
     THROTTLE_CMD = 0.4
     MIXTURE_CMD = 0.8
-    HP = 5
+    HP = 3
 
     # --- initial condition randomization (relative NED frame) ---
-    init_mode: InitMode = InitMode.BALANCED
+    # init_mode: InitMode = InitMode.BALANCED
     init_range_distance_ft: Tuple[float, float] = (6000.0, 12000.0)
     init_range_altitude_delta_ft: Tuple[float, float] = (-1000.0, 1000.0)
     init_cone_half_angle_deg: float = 30.0
@@ -572,7 +572,26 @@ class TrackingTask(FlightTask):
             "steps_left": float(sim[self.steps_left]),
         }
 
-        info = {"reward": reward_components, "env_info": env_info, "metrics_step": metrics_step}
+        trajectory = {
+            "self": {
+                "x_ft": float(sim[self.ned_Xposition_ft]),
+                "y_ft": float(sim[self.ned_Yposition_ft]),
+                "z_ft": float(sim[prp.altitude_sl_ft]),
+                "roll_rad": float(sim[prp.roll_rad]),
+                "pitch_rad": float(sim[prp.pitch_rad]),
+                "yaw_deg": float(sim[prp.heading_deg]),
+            },
+            "oppo": {
+                "x_ft": float(opponent_sim[self.ned_Xposition_ft]),
+                "y_ft": float(opponent_sim[self.ned_Yposition_ft]),
+                "z_ft": float(opponent_sim[prp.altitude_sl_ft]),
+                "roll_rad": float(opponent_sim[prp.roll_rad]),
+                "pitch_rad": float(opponent_sim[prp.pitch_rad]),
+                "yaw_deg": float(opponent_sim[prp.heading_deg]),
+            }
+        }
+
+        info = {"reward": reward_components, "env_info": env_info, "metrics_step": metrics_step, "trajectory": trajectory}
         observation = np.concatenate([np.array(state), np.array(opponent_state)])
         observation = self.observation_normalization(observation)
 

@@ -364,24 +364,53 @@ class UnifiedTrainer:
             env_cfg, training=True, num_cpu=stage_cfg["num_cpu"], vec_env_kwargs=vec_env_kwargs
         )
 
-        # --- Load Model from Previous Stage ---
-        if not self.last_best_model_path:
-             raise RuntimeError("Cannot start battle stage without a model from a previous stage.")
+        # --- Create or Load Model ---
+        agent_tag = agent_cfg.get("name", "ppo")
+        agent_cfg_for_sb3 = dict(agent_cfg)
+        agent_cfg_for_sb3.pop("name", None)
+        algo_name = agent_cfg_for_sb3.get("algorithm", None)
+        if algo_name is None:
+            raise ValueError("Missing required top-level agent.algorithm in unified config")
 
-        logger.info(f"Loading model for battle training: {self.last_best_model_path}")
-        self.model = load_agent(
-            env=train_env,
-            agent_class=agent_cfg.get("name", "ppo"),
-            path=self.last_best_model_path,
-            device=agent_cfg["device"],
-            agent_cfg=agent_cfg,
-        )
+        resolved_agent_class = agent_cfg.get("name", agent_tag)
+        if str(resolved_agent_class) == "agent" or resolved_agent_class is None:
+            resolved_agent_class = str(algo_name)
+
+        agent_cfg_for_sb3["algorithm"] = algo_name
+
+        if self.last_best_model_path:
+            logger.info(f"Loading model from previous stage: {self.last_best_model_path}")
+            self.model = load_agent(
+                env=train_env,
+                agent_class=agent_tag,
+                path=self.last_best_model_path,
+                device=agent_cfg["device"],
+                agent_cfg=agent_cfg,
+            )
+        elif self.pretrained_path:
+            latest_stage_dir = self._find_latest_training_result(self.pretrained_path)
+            logger.info(f"Fine-tuning from {latest_stage_dir}")
+            self.model = load_agent(
+                env=train_env,
+                agent_class=agent_tag,
+                path=os.path.join(latest_stage_dir, "best_model"),
+                device=agent_cfg["device"],
+                agent_cfg=agent_cfg,
+            )
+        else:
+            logger.info("Creating new model for the battle stage.")
+            self.model = creat_agent(
+                env=train_env,
+                agent_class=resolved_agent_class,
+                tensorboard_log=os.path.join(self.train_path, "tensorboard", "battle"),
+                agent_cfg=agent_cfg_for_sb3,
+            )
 
         # --- Initialize persistent callbacks ---
         logger.info("initializing curriculum learning callback for battle stage.")
         curriculum_callback = EpisodeCurriculumCallback(
-            threshold_timesteps=stage_cfg['threshold_timesteps'],
-            update_freq_episodes=stage_cfg['update_freq_episodes'],
+            threshold_timesteps=stage_cfg.get('threshold_timesteps', 0),
+            update_freq_episodes=stage_cfg.get('update_freq_episodes', 1),
             verbose=1
         )
 

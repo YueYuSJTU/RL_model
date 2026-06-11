@@ -189,19 +189,19 @@ class GamepadController:
                 yaw = 1.0
 
         # 4. Throttle (油门)
-        # 方案 A: 使用按键 (A加速 / B减速) 或 (X/Y)
-        # Xbox: A=0, B=1, X=2, Y=3
-        throttle = 0.0
-        if self.joystick.get_numbuttons() > 1:
-            if self.joystick.get_button(0): # A 键 加速
-                throttle = 1.0
-            elif self.joystick.get_button(1): # B 键 减速/刹车
-                throttle = -1.0
+        # # 方案 A: 使用按键 (A加速 / B减速) 或 (X/Y)
+        # # Xbox: A=0, B=1, X=2, Y=3
+        # throttle = 0.0
+        # if self.joystick.get_numbuttons() > 1:
+        #     if self.joystick.get_button(0): # A 键 加速
+        #         throttle = 1.0
+        #     elif self.joystick.get_button(1): # B 键 减速/刹车
+        #         throttle = -1.0
         
         # 方案 B: 使用扳机键 (Triggers) 作为油门
         # 许多手柄扳机是 Axis，范围 -1 (松开) 到 1 (按下)
-        # axis_rt = self.joystick.get_axis(5) 
-        # if axis_rt > -0.9: throttle = (axis_rt + 1) / 2 # 映射到 0~1
+        axis_rt = self.joystick.get_axis(5) 
+        throttle = (axis_rt + 1) / 3 # 除以2是映射到 0~1；为了让人降低一点速度，减小一点油门开度，否则飞的很远，大家都是平局
 
         # 组装动作
         action = np.array([roll, -pitch, yaw, throttle], dtype=np.float32)

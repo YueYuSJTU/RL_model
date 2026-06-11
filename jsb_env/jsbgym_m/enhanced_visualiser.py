@@ -226,9 +226,10 @@ class Enhanced3DVisualiser(object):
         self.axes_control = ControlAxesTuple(ax_stick, ax_thr, ax_rud)
 
     def _update_3d_display(self, pos1, att1, pos2=None, att2=None):
+        # 第一人称版本
         ax = self.ax_combat
         
-        # 清理旧对象 (Performance critical)
+        # 清理旧对象
         self._clean_axes(ax)
         
         # 1. 绘制轨迹
@@ -241,32 +242,105 @@ class Enhanced3DVisualiser(object):
         if pos2 and att2:
             self._draw_aircraft_model(ax, pos2, att2, is_opponent=True)
             
-        # 3. 动态相机逻辑 (核心修改)
-        if pos2:
-            # 计算中点
-            center_x = (pos1[0] + pos2[0]) / 2
-            center_y = (pos1[1] + pos2[1]) / 2
-            center_z = (pos1[2] + pos2[2]) / 2
-            
-            # 计算需要的半径 (距离的一半 + 余量)
-            dist = math.sqrt((pos1[0]-pos2[0])**2 + (pos1[1]-pos2[1])**2 + (pos1[2]-pos2[2])**2)
-            view_radius = max(self.MIN_VIEW_SIZE, min(dist * 0.8, self.MAX_VIEW_SIZE))
-        else:
-            center_x, center_y, center_z = pos1
-            view_radius = self.MIN_VIEW_SIZE
+        # ==========================================
+        # 3. 核心修改：第一人称/尾随锁定视角 (Chase Cam)
+        # ==========================================
+        center_x, center_y, center_z = pos1
+        
+        # 设定一个固定的视场半径，必须足够大以包含敌机（防止敌机被 Matplotlib 裁剪）
+        # 2000 米大约能覆盖常规格斗距离
+        view_radius = 2000.0 
 
-        # 设置轴范围
+        # 【重点1】：构建一个绝对完美的立方体包围盒，中心永远是我方飞机。
+        # 即使 Z 轴小于 0 也不能改变形状，否则画面在俯仰时会发生严重拉伸形变。
         ax.set_xlim([center_x - view_radius, center_x + view_radius])
         ax.set_ylim([center_y - view_radius, center_y + view_radius])
-        ax.set_zlim([0, max(center_z + view_radius, 2000)]) # 地面是0
+        ax.set_zlim([center_z - view_radius, center_z + view_radius])
+        
+        try:
+            # 强制保证 3D 空间的比例是 1:1:1，防止因窗口比例导致的变形
+            ax.set_box_aspect((1, 1, 1))
+        except AttributeError:
+            pass # 兼容老版本 matplotlib
+
+        # 【重点2】：计算相机视角
+        roll, pitch, yaw = att1
+        
+        # 偏航角映射 (Azimuth): 
+        # 航空航向角 Yaw=0 (向北/Y轴)，Matplotlib 需要设为 -90 才能从南(-Y)看向北(+Y)
+        azim = -math.degrees(yaw) - 90
+        
+        # 俯仰角映射 (Elevation):
+        # 飞机机头抬起 (pitch > 0)，相机在机尾需要下沉（相对于飞机的地平线），因此取负。
+        # +10 度是为了稍微俯视飞机，避免机背和尾翼完全挡住前方的视线（你可以修改这个值）。
+        elev = -math.degrees(pitch) + 10
+        
+        # 滚转角映射 (Roll):
+        # 飞机翻滚时，相机同步翻滚。注意：Matplotlib 需要 >= 3.6 版本才支持 roll 参数！
+        cam_roll = math.degrees(roll) 
+
+        # 应用相机设置
+        try:
+            # 如果你的 matplotlib >= 3.6，这将实现完美的同步翻滚
+            ax.view_init(elev=elev, azim=azim, roll=cam_roll)
+        except TypeError:
+            # 兼容低版本 matplotlib，但只有偏航和俯仰，没有机身跟随翻滚效果
+            ax.view_init(elev=elev, azim=azim)
+
+        # ==========================================
         
         # 4. 绘制地面投影线 (辅助定位)
-        ax.plot([pos1[0], pos1[0]], [pos1[1], pos1[1]], [0, pos1[2]], 'b--', linewidth=0.5, alpha=0.5)
+        ax.plot([pos1[0], pos1[0]], [0, 0], [0, pos1[2]], 'b--', linewidth=0.5, alpha=0.5)
         if pos2:
             ax.plot([pos2[0], pos2[0]], [pos2[1], pos2[1]], [0, pos2[2]], 'r--', linewidth=0.5, alpha=0.5)
 
         # 5. 绘制地面网格 (基于当前视野中心)
-        self._draw_ground_grid(ax, center_x, center_y, view_radius * 2)
+        # 随着飞机移动，网格会自动在下方生成
+        self._draw_ground_grid(ax, center_x, center_y, view_radius)
+
+    # def _update_3d_display(self, pos1, att1, pos2=None, att2=None):
+    #     # 第三人称版本
+    #     ax = self.ax_combat
+        
+    #     # 清理旧对象 (Performance critical)
+    #     self._clean_axes(ax)
+        
+    #     # 1. 绘制轨迹
+    #     self._draw_trail(ax, self.positions, 'b', '-')
+    #     if pos2:
+    #         self._draw_trail(ax, self.opponent_positions, 'r', '--')
+            
+    #     # 2. 绘制模型
+    #     self._draw_aircraft_model(ax, pos1, att1, is_opponent=False)
+    #     if pos2 and att2:
+    #         self._draw_aircraft_model(ax, pos2, att2, is_opponent=True)
+            
+    #     # 3. 动态相机逻辑 (核心修改)
+    #     if pos2:
+    #         # 计算中点
+    #         center_x = (pos1[0] + pos2[0]) / 2
+    #         center_y = (pos1[1] + pos2[1]) / 2
+    #         center_z = (pos1[2] + pos2[2]) / 2
+            
+    #         # 计算需要的半径 (距离的一半 + 余量)
+    #         dist = math.sqrt((pos1[0]-pos2[0])**2 + (pos1[1]-pos2[1])**2 + (pos1[2]-pos2[2])**2)
+    #         view_radius = max(self.MIN_VIEW_SIZE, min(dist * 0.8, self.MAX_VIEW_SIZE))
+    #     else:
+    #         center_x, center_y, center_z = pos1
+    #         view_radius = self.MIN_VIEW_SIZE
+
+    #     # 设置轴范围
+    #     ax.set_xlim([center_x - view_radius, center_x + view_radius])
+    #     ax.set_ylim([center_y - view_radius, center_y + view_radius])
+    #     ax.set_zlim([0, max(center_z + view_radius, 2000)]) # 地面是0
+        
+    #     # 4. 绘制地面投影线 (辅助定位)
+    #     ax.plot([pos1[0], pos1[0]], [pos1[1], pos1[1]], [0, pos1[2]], 'b--', linewidth=0.5, alpha=0.5)
+    #     if pos2:
+    #         ax.plot([pos2[0], pos2[0]], [pos2[1], pos2[1]], [0, pos2[2]], 'r--', linewidth=0.5, alpha=0.5)
+
+    #     # 5. 绘制地面网格 (基于当前视野中心)
+    #     self._draw_ground_grid(ax, center_x, center_y, view_radius * 2)
 
     def _clean_axes(self, ax):
         # 移除集合 (Poly3DCollection)

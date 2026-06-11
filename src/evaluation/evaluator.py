@@ -136,9 +136,11 @@ class Evaluator:
                 episode_done = False
                 episode_reward = 0
 
-                # recurrent state for agent1 only
+                # recurrent state for both agents
                 state1 = None
+                state2 = None
                 episode_start1 = np.ones((vec_env.num_envs,), dtype=bool)
+                episode_start2 = np.ones((vec_env.num_envs,), dtype=bool)
 
                 # per-episode step metrics collection
                 step_series: List[Dict[str, float]] = []
@@ -163,10 +165,22 @@ class Evaluator:
                         except TypeError:
                             action1, _ = model1.predict(obs[:, :obs_length//2], deterministic=True)
 
-                    action2, _ = model2.predict(obs[:, obs_length//2:], deterministic=True)
+                    # Update model2 to also handle recurrent states
+                    try:
+                        action2, state2 = model2.predict(
+                            obs[:, obs_length//2:],
+                            state=state2,
+                            episode_start=episode_start2,
+                            deterministic=True,
+                        )
+                    except TypeError:
+                        action2, _ = model2.predict(obs[:, obs_length//2:], deterministic=True)
+
                     combined_action = np.concatenate([action1, action2], axis=-1)
                     obs, reward, dones, info = vec_env.step(combined_action)
+                    
                     episode_start1 = dones
+                    episode_start2 = dones
 
                     episode_reward += reward[0]
 
