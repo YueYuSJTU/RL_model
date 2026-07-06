@@ -46,11 +46,27 @@ for env_id, (
     kwargs = dict(aircraft=plane, task_type=task, shaping=shaping)
     gym.envs.registration.register(id=env_id, entry_point=entry_point, kwargs=kwargs)
 
+# --- Custom demo env registrations (not part of utils.get_env_id_kwargs_map) ---
+# Multi-aircraft team-vs-team target-point attack/defend demo env.
+# Keep a stable explicit id so downstream demo scripts can refer to it.
+_DEMO_MULTI_TEAM_ID = "F16-AttackDefendPointTask-Demo-NoFG-v0"
+if _DEMO_MULTI_TEAM_ID not in gym.envs.registry:
+    gym.envs.registration.register(
+        id=_DEMO_MULTI_TEAM_ID,
+        entry_point="jsbgym_m.multi_environment:MultiTeamJsbSimEnv",
+        kwargs={
+            "aircraft": f16,
+            "opponent_aircraft": f16,
+            "render_mode": None,
+        },
+    )
+
 # make an Enum storing every Gym-JSBSim environment ID for convenience and value safety
 Envs = enum.Enum.__call__(
     "Envs",
     [
         (utils.AttributeFormatter.translate(env_id), env_id)
         for env_id in utils.get_env_id_kwargs_map().keys()
-    ],
+    ]
+    + [(utils.AttributeFormatter.translate(_DEMO_MULTI_TEAM_ID), _DEMO_MULTI_TEAM_ID)],
 )

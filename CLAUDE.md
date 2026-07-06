@@ -1,5 +1,29 @@
 这份文件为 Claude Code (claude.ai/code) 在处理本仓库代码时提供指南。
 
+# 最近新增：多机任务导向演示环境（Attack/Defend Target Point）
+
+已在 `jsb_env/jsbgym_m/` 下新增一个面向演示/部署回放的多机对抗环境（非训练吞吐优先），支持红方进攻目标点、蓝方防守，双方各 1-5 架飞机。
+
+## 新增/修改内容
+- 新增任务：`jsb_env/jsbgym_m/task_attack_defend_point.py`
+  - `AttackDefendPointTask`：以目标点为中心的攻防任务逻辑
+  - action/obs 为 `gym.spaces.Dict`，并做 padding+mask 设计（max_red/max_blue）
+  - 修复了 `gym.spaces.Box` 的 low/high shape 必须与空间 shape 一致的问题（low/high 通过 `np.tile` 扩展到 `(max_*, act_dim)`）
+- 新增环境：`jsb_env/jsbgym_m/multi_environment.py`
+  - `MultiTeamJsbSimEnv`：管理多架飞机的 `Simulation` 列表（red_sims/blue_sims），逐机低层 action（舵面/油门）控制
+  - 位置计算不依赖 `position/positionX-ft`（该属性在当前模型中不存在），改为用 `prp.ecef_x_ft/y_ft/z_ft` 通过 `GPS_NED(unit='ft')` 做 ECEF→NED，reset 时用 red[0] 设 NED 原点
+  - 任务进度通过 `info['task']` 输出：min_red_dist_to_target_ft、hold_elapsed_s、time_s、success、time_up、n_red、n_blue
+- 注册 demo env_id：`jsb_env/jsbgym_m/__init__.py`
+  - 显式注册 `F16-AttackDefendPointTask-Demo-NoFG-v0` → `jsbgym_m.multi_environment:MultiTeamJsbSimEnv`
+  - 并把该 env_id 加入 `Envs` 枚举
+
+## Smoke 测试
+使用 conda 环境 `js_gpu`：
+- `conda run -n js_gpu python -c "import gymnasium as gym; import jsb_env.jsbgym_m; env=gym.make('F16-AttackDefendPointTask-Demo-NoFG-v0'); obs,info=env.reset(); a=env.action_space.sample(); o,r,term,trunc,info=env.step(a); print('ok', r, term, trunc, info.get('task',{})); env.close()"`
+
+## 多机运行与可视化：
+`python -m src.show_scene --env_id F16-AttackDefendPointTask-Demo-NoFG-v0 --max_steps 50`
+
 # 项目概述
 
 本仓库是一个基于 JSBSim 的双机空战强化学习代码库，建立在 Gymnasium 包装器（衍生自 jsbgym）之上。它添加了自定义任务以及使用 Stable-Baselines3 (主要是 PPO) 的训练/评估流水线，外加可视化和可选的人工/手动控制功能。
