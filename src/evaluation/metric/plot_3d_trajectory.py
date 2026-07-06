@@ -75,8 +75,9 @@ def draw_f16(ax, f16_pts, f16_faces, pos, att, is_opponent=False, scale=30.0):
 def main():
     # 定义待评估的两个模型路径
     model1_path = "experiments/20260316_093625_lstm_train/stage2/20260323_133647_cycle_35"
+    model2_path = "opponent_pool/test_pool/1"
     # model2_path = "experiments/20250616_221656/stage2/20250616_221824_TrackingTask_ppo_1layer1"
-    model2_path = "experiments/20260428_141850_best_train_mlp2/stage2/20260429_104611_cycle_30"
+    # model2_path = "experiments/20260428_141850_best_train_mlp2/stage2/20260429_104611_cycle_30"
     
     # 获取并加载配置
     env1_cfg = load_config(os.path.join(model1_path, "env_config.yaml"))

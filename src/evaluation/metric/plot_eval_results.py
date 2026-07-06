@@ -196,7 +196,7 @@ def parse_eval_text(text):
         
     return parsed_data
 
-def plot_win_rates(data_dict, save_path="model_win_rates.png"):
+def plot_win_rates(data_dict, save_path="src/evaluation/plot/model_win_rates.png"):
     # ======= 科研图表样式配置 =======
     sns.set_theme(style="ticks", context="paper")
     plt.rcParams.update({
@@ -204,8 +204,8 @@ def plot_win_rates(data_dict, save_path="model_win_rates.png"):
         "font.serif": ["Times New Roman"],
         "axes.titlesize": 17,
         "axes.labelsize": 16,
-        "xtick.labelsize": 15,
-        "ytick.labelsize": 15,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
         "legend.fontsize": 11,
         "hatch.linewidth": 0.5,
     })
@@ -299,11 +299,11 @@ def plot_capability_metrics(data_dict, save_path="src/evaluation/plot/model_capa
     models = list(data_dict.keys())
     # 提取四个绘图用的指标列表
     metrics = {
-        "Gun Opp. Ratio (↑ Better) (%)": [data_dict[m]["Gun Opportunity"] * 100 for m in models],
+        "Gun Opportunity Ratio (↑ Better) (%)": [data_dict[m]["Gun Opportunity"] * 100 for m in models],
         "Mean Specific Energy (↑ Better) (ft)": [data_dict[m]["Specific Energy"] for m in models],
         "Mean Track Angle (↓ Better) (rad)": [data_dict[m]["Track Angle"] for m in models],
         # 修改：将 Overshoot 改为 Total Damage to Oppo（不乘以 100，因为它是总伤害值）
-        "Total Damage to Oppo (↑ Better)": [data_dict[m]["Damage to Oppo"] for m in models]
+        "Total Damage to Opponent (↑ Better)": [data_dict[m]["Damage to Oppo"] for m in models]
     }
     
     fig, axes = plt.subplots(2, 2, figsize=(10, 8))
