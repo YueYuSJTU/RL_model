@@ -186,3 +186,24 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+### LaTeX ###
+# latexmk / xelatex 在 .tex 同目录生成的编译中间产物（见 小论文-终稿/）
+# 注意：不忽略 *.pdf，因为 小论文-终稿/sn-article.pdf 是仓库中已跟踪的成品
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.xdv
+*.toc
+*.lof
+*.lot
+*.idx
+*.ind
+*.ilg
+*.nav
+*.snm
+*.vrb

@@ -1,5 +1,16 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:conda",
     "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+
+    // ---- LaTeX Workshop (用于 小论文-终稿/) ----
+    // 默认走内置 recipe "latexmk (xelatex)"，即 latexmk -xelatex，自动处理 bibtex 多趟编译。
+    // 内置 tool/recipe 由扩展提供，此处只改默认选项，不覆盖 tools/recipes 数组。
+    "latex-workshop.latex.recipe.default": "latexmk (xelatex)",
+    // 保存时编译（默认 onFileChange 在任何依赖变动时都会触发）
+    "latex-workshop.latex.autoBuild.run": "onSave",
+    // 产物与 .tex 同目录，保证模板中的相对图片路径可解析
+    "latex-workshop.latex.outDir": "%DIR%",
+    // 编译后在编辑器标签页内预览 PDF
+    "latex-workshop.view.pdf.viewer": "tab"
 }
