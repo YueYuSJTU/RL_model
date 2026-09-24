@@ -21,8 +21,57 @@
 使用 conda 环境 `js_gpu`：
 - `conda run -n js_gpu python -c "import gymnasium as gym; import jsb_env.jsbgym_m; env=gym.make('F16-AttackDefendPointTask-Demo-NoFG-v0'); obs,info=env.reset(); a=env.action_space.sample(); o,r,term,trunc,info=env.step(a); print('ok', r, term, trunc, info.get('task',{})); env.close()"`
 
-## 多机运行与可视化：
-`python -m src.show_scene --env_id F16-AttackDefendPointTask-Demo-NoFG-v0 --max_steps 50`
+## 多机运行与可视化（离线 scene 采集/绘图入口）
+- 采集：仅保存 `info['scene']` 序列为 JSON（默认不绘图）
+  - `python -m src.show_scene --env_id F16-AttackDefendPointTask-Demo-NoFG-v0 --max_steps 50`
+  - 输出：`experiments/scene_viz/<timestamp>/scene.json`
+- 绘图：交互式 3D 轨迹图（matplotlib 不自动退出，需手动关窗口）
+  - 运行 `show_scene.py` 后按其打印的提示命令执行，或直接：
+    - `python -c "import json; from src.scene_viz.plot_scene_3d_trajectory import plot_scene_3d_trajectory; frames=json.load(open('experiments/scene_viz/<timestamp>/scene.json','r')); plot_scene_3d_trajectory(frames, title='F16-AttackDefendPointTask-Demo-NoFG-v0')"`
+
+## 关键文件速查（按“要做什么→看哪个文件”）
+
+### 多机演示环境（Attack/Defend Target Point）
+- `jsb_env/jsbgym_m/task_attack_defend_point.py`
+  - 攻防目标点任务逻辑（目标点、奖励/终止、progress）。
+  - 关键输出：`compute_progress()` 生成的 `info['task']` 字段（如 `time_s/success/time_up/n_red/n_blue` 等）。
+- `jsb_env/jsbgym_m/multi_environment.py`
+  - 多机环境本体：维护 `red_sims/blue_sims` 的 `Simulation` 列表并推进仿真。
+  - **离线可视化数据源**：每步在 `info['scene']` 中打包轨迹快照：
+    - `t`、`red_pos_ft`、`blue_pos_ft`、`target_point_ft`、`red_mask`、`blue_mask`
+    - 坐标：local NED(ft) 的 (north, east, altitude_sl_ft)
+
+### 传统渲染/可视化（在线 human/anim3d/flightgear）
+- `jsb_env/jsbgym_m/environment.py`
+  - 单机/双机环境与 render_mode 分发模板。
+  - `DoubleJsbSimEnv.render()`：`anim3d` 使用 `Enhanced3DVisualiser.plot(self.sim, self.opponent_sim)`。
+- `jsb_env/jsbgym_m/enhanced_visualiser.py`
+  - `Enhanced3DVisualiser`：在线 3D 可视化器（anim3d），内部使用 matplotlib/TkAgg。
+- `jsb_env/jsbgym_m/visualiser.py`
+  - `FigureVisualiser/GraphVisualiser/FlightGearVisualiser/MultiplayerFlightGearVisualiser` 等传统可视化器。
+
+### 评估/展示入口（既有系统）
+- `src/show.py`
+  - 既有交互式展示/评估入口（可选渲染、可手动控制等）。
+- `src/evaluation/evaluator.py`
+  - show/eval 的 rollout 主循环；当 render_mode 非 None 时会 `vec_env.render()`。
+- `src/environments/make_env.py`
+  - 训练/评估使用的 env 工厂，负责 `gym.make(env_id, render_mode=...)` 等。
+
+### 离线 scene 可视化（本次新增，独立于 src/show.py）
+- `src/show_scene.py`
+  - **独立入口**：rollout 环境并收集 `info['scene']`，默认只保存 `scene.json`，不自动绘图。
+  - 内部会 `import jsb_env.jsbgym_m` 以确保 env_id 已注册。
+- `src/scene_viz/plot_scene_3d_trajectory.py`
+  - 离线 scene 3D 轨迹绘制与数据落盘：
+    - `dump_scene_json(scene_frames, out_path)`
+    - `plot_scene_3d_trajectory(scene_frames, title=None)`（交互式 `plt.show()`，不自动退出）
+
+### 既有离线轨迹绘图参考（tracking 系统）
+- `jsb_env/jsbgym_m/task_tracking.py`
+  - tracking 任务会在 step info 中生成 `info['trajectory']`（self/oppo）。
+- `src/evaluation/metric/plot_3d_trajectory.py`
+  - 消费 `info['trajectory']` 的 3D 轨迹绘图脚本（可参考其绘图风格/保存方式）。
 
 # 项目概述
 
