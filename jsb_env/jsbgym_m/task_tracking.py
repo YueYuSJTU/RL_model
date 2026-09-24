@@ -1086,7 +1086,7 @@ def GammaR(distance):
         return betaR(distance) * (1 - logistic(distance, 1/200, 4100))
 
 def betaR(distance):
-    return -2.5
+    return 2.5
 
 
 class TrackingInitTask(TrackingTask):

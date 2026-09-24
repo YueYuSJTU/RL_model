@@ -373,22 +373,23 @@ The weapon system and engagement criteria used in this work are inspired by the 
     \theta_{tra} = \arccos \left( \frac{\mathbf{d} \cdot \mathbf{v}_{nose}}{\|\mathbf{d}\|_2} \right).
     \label{eq:tra}
 \end{equation}
-The opponent is considered to be inside the WEZ only when it lies within the effective firing range ($500\text{ ft} \le D \le 3000\text{ ft}$) and inside a cone with an aperture angle of $15^\circ$. This condition can be expressed by the indicator function $\mathbb{W}_{WEZ}(t)$:
+The opponent is considered to be inside the WEZ only when it lies within the effective firing range $[D_{\min}, D_{\max}]$ and inside a cone of half-aperture angle $\theta_{\max}$ around the gun line. This condition can be expressed by the indicator function $\mathbb{W}_{WEZ}(t)$:
 \begin{equation}
     \mathbb{W}_{WEZ}(t) = 
     \begin{cases} 
-        1, & \text{if } 500 \le D(t) \le 3000 \text{ and } \theta_{tra}(t) \le 15^\circ \\ 
+        1, & \text{if } D_{\min} \le D(t) \le D_{\max} \text{ and } \theta_{tra}(t) \le \theta_{\max} \\ 
         0, & \text{otherwise} 
-    \end{cases}.
+    \end{cases},
     \label{eq:wez}
 \end{equation}
+where $D_{\min}$ and $D_{\max}$ denote the near and far boundaries of the effective firing range and $\theta_{\max}$ denotes the maximum admissible off-boresight angle. These three thresholds are not free parameters of the learning problem, since they describe the geometry of a valid firing solution rather than the behaviour of the agent. They were determined by considering both the practical characteristics of within-visual-range gun engagements and the publicly released rules of the DARPA ADT. In this work they are set to $D_{\min} = 500$ ft, $D_{\max} = 4500$ ft and $\theta_{\max} = 15^\circ$. The near boundary corresponds to the minimum separation at which a tracking solution can still be established, and it rules out an unrealistic point-blank firing condition; the far boundary corresponds to the range beyond which the dispersion of the gun and the loss of lead accuracy make hits improbable at the closing speeds of the modelled aircraft; and the cone angle follows the ADT criterion, which requires a close alignment between the target and the gun line.
 
-When $\mathbb{W}_{WEZ}(t) = 1$, the agent applies continuous damage to the opponent at the current time step. The decay of the opponent's HP follows Eq. \ref{eq:damage}:
+Both aircraft enter an engagement with an initial health of $\mathrm{HP}_{0} = 3$. When $\mathbb{W}_{WEZ}(t) = 1$, the agent applies continuous damage to the opponent at the current time step, and the decay of the opponent's health follows
 \begin{equation}
-    \text{HP}_{oppo}(t+\Delta t) = \max\left(0, \text{HP}_{oppo}(t) - \lambda \cdot \mathbb{W}_{WEZ}(t) \cdot \Delta t \right)
+    \text{HP}_{oppo}(t+\Delta t) = \max\left(0, \text{HP}_{oppo}(t) - \lambda(D) \cdot \mathbb{W}_{WEZ}(t) \cdot \Delta t \right)
     \label{eq:damage},
 \end{equation}
-where $\lambda = \frac{3000-D(t)}{2500}$ is the prescribed per-unit-time gun damage rate.
+where $\lambda(D) = \lambda_{0}\left(D_{\max}-D(t)\right)/\left(D_{\max}-D_{\min}\right)$ is the prescribed per-unit-time gun damage rate and $\lambda_{0} = 1$ HP/s is its value at the near boundary. The damage rate therefore decreases linearly with range and vanishes at the far boundary of the WEZ, so that a target held at the minimum range is destroyed within $3$ s, whereas a target engaged near the far boundary survives correspondingly longer for the same amount of tracking time.
 
 At the same time, aerodynamic data, FBW computation, and combat logic are highly decoupled within the JSBSim framework, so the proposed simulation architecture has good extensibility. By replacing the aerodynamic database and model configuration, the environment can be extended to other aircraft types, such as the F-15, providing a basis for future studies on multi-aircraft and asymmetric air combat.
 
@@ -458,7 +459,9 @@ Curriculum learning is commonly used to mitigate the training difficulty caused 
 \subsubsection{Objective Curriculum}
 \label{sec:reward_curriculum}
 
-We implement the objective curriculum by progressively adjusting the reward function. The objective curriculum is structured in two successive stages, where the agent first masters stable flight and then learns air combat skills. The first stage includes only reward terms related to flight quality and does not involve relative engagement geometry or firing-related indicators. The second stage introduces reward terms related to relative geometry and gun engagement, so that the agent can learn tactical positioning and evasive maneuvering. The complete reward definitions for the two stages are given in Table~\ref{tab:reward_stage1} and Table~\ref{tab:reward_stage2}, respectively.
+We implement the objective curriculum by progressively adjusting the reward function. The objective curriculum is structured in two successive stages, where the agent first masters stable flight and then learns air combat skills. The first stage includes only reward terms related to flight quality and does not involve relative engagement geometry or firing-related indicators. The second stage introduces reward terms related to relative geometry and gun engagement, so that the agent can learn tactical positioning and evasive maneuvering.
+
+In both stages the reward is composed of a small number of normalized terms, each of which represents one requirement of the task and is scaled by a weight, so that the contribution of the individual requirements can be analysed and adjusted separately. The general expressions of the terms of the two stages are given in Table~\ref{tab:reward_stage1} and Table~\ref{tab:reward_stage2}, respectively, together with the notation used for their thresholds and weights. The values assigned to these parameters, and the procedure by which they were calibrated, are described in Section~\ref{sec:reward_calibration}.
 
 
 % \begin{table}
@@ -485,33 +488,36 @@ We implement the objective curriculum by progressively adjusting the reward func
 % \end{tabular}
 % \end{table}
 \begin{table}[h]
-\caption{Stage-1 reward function.}\label{tab:reward_stage1}%
+\caption{Stage-1 reward terms and their general expressions.}\label{tab:reward_stage1}%
 \begin{tabular*}{\textwidth}{@{\extracolsep\fill}p{0.32\textwidth}p{0.64\textwidth}}
 \toprule
 Reward term & Mathematical expression \\
 \midrule
 Aileron command penalty
-& $r_{sa}=4\cdot\dfrac{0.5}{0.5+|\delta_a|}$ \\[6pt]
+& $r_{sa}=w_{sa}\dfrac{s_{sa}}{s_{sa}+|\delta_a-\delta_a^{\ast}|}$ \\[6pt]
 
 Throttle command penalty
-& $r_{st}=8\cdot\dfrac{0.1}{0.1+|\delta_T-0.4|}$ \\[6pt]
+& $r_{st}=w_{st}\dfrac{s_{st}}{s_{st}+|\delta_T-\delta_T^{\ast}|}$ \\[6pt]
 
 Roll-angle penalty
-& $r_{sr}=4\cdot\dfrac{0.5}{0.5+|\phi|}$ \\[6pt]
+& $r_{sr}=w_{sr}\dfrac{s_{sr}}{s_{sr}+|\phi-\phi^{\ast}|}$ \\[6pt]
 
 Action smoothness penalty
-& $r_{ap}=4\left(\Phi_{ap}(s_{t+1})-\Phi_{ap}(s_t)\right)$, 
-  $\Phi_{ap}(s)=-\max_j\dfrac{|\Delta u_j|}{u_{j,ub}}$ \\[6pt]
+& $r_{ap}=w_{ap}\left(\Psi_{ap}(t)-\Psi_{ap}(t-1)\right)$, 
+  $\Psi_{ap}(t)=-\max_j\dfrac{\overline{|\Delta u_j|}_{L_{ap}}}{u_{j,ub}}$ \\[6pt]
 
 Altitude stability penalty
-& $r_{alt}=8\times10^4\left(\Phi_{alt}(s_{t+1})-\Phi_{alt}(s_t)\right)$,
-  $\Phi_{alt}(s)=-\dfrac{|\Delta h|}{h_{ub}}$ \\
+& $r_{alt}=w_{alt}\left(\Psi_{alt}(t)-\Psi_{alt}(t-1)\right)$,
+  $\Psi_{alt}(t)=-\dfrac{\overline{|\Delta h|}_{L_{alt}}}{h_{ub}}$ \\
 \botrule
 \end{tabular*}
 \end{table}
 
-% 可删除
-The subscript “ub” in Table~\ref{tab:reward_stage1} denotes the upper bound. The penalties of stage one impose direct negative feedback on abrupt control-surface oscillations and large altitude variations, encouraging the agent to maintain near-level flight. 
+The subscript ``ub'' in Table~\ref{tab:reward_stage1} denotes the upper bound of the corresponding state variable, that is, $u_{j,ub}=1$ for the normalized surface commands and $h_{ub}=85000$ ft for the altitude; $\delta_a^{\ast}$, $\delta_T^{\ast}$ and $\phi^{\ast}$ are the reference values of the aileron input, the throttle input and the roll angle, respectively; $w_{\bullet}$ and $s_{\bullet}$ denote the weight and the scaling factor of a term; and $\overline{|\Delta x|}_{L}$ denotes the mean absolute step-to-step change of the quantity $x$ over the preceding $L$ decision steps.
+
+The first three terms are asymptotic error potentials. Each of them attains its maximum $w_{\bullet}$ when the corresponding variable equals its reference value and decays as the deviation grows, with $s_{\bullet}$ setting the deviation at which half of the maximum is retained. These terms therefore encode the requirement of a trimmed and level flight condition rather than a specific manoeuvre: the aileron and roll terms suppress unnecessary lateral control activity and residual bank, while the throttle term concentrates the engine thrust around the cruise setting, which prevents both the loss of airspeed that would reduce the available control authority and the sustained over-throttle condition that would accompany an aggressive energy strategy.
+
+The two remaining terms are potential-difference terms, and they penalize the variation of the control activity and of the vertical motion rather than their absolute level. Since the potentials are defined as the windowed mean absolute rates of change, a steady manoeuvre leaves $\Psi$ almost unchanged and therefore produces almost no penalty, whereas rapid reversals of the control surfaces or abrupt changes of the vertical rate produce a penalty proportional to the corresponding increment. This formulation thus acts as a smoothness regularizer that does not discourage sustained manoeuvring, and, because the potentials depend only on the variation of the state, it does not bias the policy towards any particular engagement geometry. The weights of the two terms differ by more than four orders of magnitude, which reflects the different scales of the quantities involved: the normalized control deviation is of order $10^{-1}$ to $10^{0}$, whereas the normalized altitude increment of a typical manoeuvre is of order $10^{-4}$, so that a common weight would render the altitude term numerically inactive.
 
 % \begin{table}
 % \centering
@@ -541,7 +547,7 @@ The subscript “ub” in Table~\ref{tab:reward_stage1} denotes the upper bound.
 % \end{tabular}
 % \end{table}
 \begin{table}[h]
-\caption{Stage-2 reward function.}\label{tab:reward_stage2}%
+\caption{Stage-2 reward terms and their general expressions.}\label{tab:reward_stage2}%
 \begin{tabular*}{\textwidth}{@{\extracolsep\fill}p{0.30\textwidth}p{0.66\textwidth}}
 \toprule
 Reward term & Mathematical expression \\
@@ -549,33 +555,83 @@ Reward term & Mathematical expression \\
 Relative position reward
 & $\begin{aligned}
 r_{rp}
-&=\left(\frac{\theta_{tra}}{\pi}-2\right)
-\sigma\left(\frac{\theta_{adv}}{\pi};18,0.5\right)
--\frac{\theta_{tra}}{\pi}+1
+&=w_{rp}\left[\left(\hat{\theta}_{tra}-2\right)
+\sigma\left(\hat{\theta}_{adv};k_{a},\hat{\theta}_{a}\right)
+-\hat{\theta}_{tra}+1\right]
 \end{aligned}$ \\[10pt]
 
 Closure rate reward
 & $\begin{aligned}
 r_{cr}
-&=\frac{V_{c}}{500}
-\left[1-\sigma\left(\frac{\theta_{adv}}{\pi};18,0.5\right)\right] \times \sigma\left(D;\frac{1}{500},2900\right)
+&=w_{cr}\frac{V_{c}}{V_{ref}}
+\left[1-\sigma\left(\hat{\theta}_{adv};k_{a},\hat{\theta}_{a}\right)\right]
+\sigma\left(D;k_{D},D_{c}\right)
 \end{aligned}$ \\[10pt]
 
 Aiming reward
-& $r_{gb}=\Gamma_{B}(D)\left[1-\sigma\left(\frac{\theta_{tra}}{\pi};10^5,\frac{1}{180}\right)\right]$ \\[8pt]
+& $r_{gb}=\Gamma_{B}(D)\left[1-\sigma\left(\hat{\theta}_{tra};k_{g},\hat{\theta}_{g}\right)\right]$ \\[8pt]
 
 Opponent aiming penalty
-& $r_{gr}=-\Gamma_{R}(D)\,\sigma\left(\frac{\theta_{adv}}{\pi};800,\frac{178}{180}\right)$ \\[8pt]
+& $r_{gr}=-\Gamma_{R}(D)\,\sigma\left(\hat{\theta}_{adv};k_{r},\hat{\theta}_{r}\right)$ \\[8pt]
 
 Low-altitude penalty
-& $r_{deck}=-4\left[1-\sigma\left(h;\frac{1}{20},1300\right)\right]$ \\
+& $r_{deck}=-w_{deck}\left[1-\sigma\left(h;k_{h},h_{deck}\right)\right]$ \\
 \botrule
 \end{tabular*}
 \end{table}
 
-In Table~\ref{tab:reward_stage2}, the function $\sigma(x;k,x_0)=1/(1+e^{-k(x-x_0)})$ is the logistic function. $\Gamma_{B}(D)$ and $\Gamma_{R}(D)$ denote the weighting functions for the gun-effective ranges of the ego and the opponent aircraft, respectively. These functions approach 1 within effective range and decay rapidly to 0 outside that range. 
+In Table~\ref{tab:reward_stage2}, $\sigma(x;k,x_0)=1/(1+e^{-k(x-x_0)})$ is the logistic function, in which $k$ controls the slope of the transition and $x_0$ its centre, and the normalized angles $\hat{\theta}_{tra}=\theta_{tra}/\pi$ and $\hat{\theta}_{adv}=\theta_{adv}/\pi$ are used so that all angular thresholds are expressed on a common scale. The adverse angle $\theta_{adv}$ measures the angular advantage of the ego aircraft: it is zero when the ego aircraft is directly behind the opponent, and it increases to $\pi$ when the opponent has reversed the situation and the ego aircraft lies in front of it. A small adverse angle therefore corresponds to an offensive situation, and a large one to a defensive situation.
 
-The relative position reward term encourages the agent to occupy a favorable position behind the opponent. The closure rate reward serves to prevent overshoot during the approach. And the two aiming reward terms encourage firing behavior and evasion. Meanwhile, the low-altitude penalty acts as a flight-safety constraint to prevent the agent from entering dangerously low-altitude regimes. This progressive reward design enables the agent to exhibit tactically meaningful offensive and defensive behaviors during combat. The reward function of stage 2 follows the approach adopted in the ADT project \cite{pope_hierarchical_2023}.
+The aiming reward and the opponent aiming penalty are weighted by the functions $\Gamma_{B}(D)$ and $\Gamma_{R}(D)$, which represent the range dependence of the firing opportunities of the two aircraft. Both are band-pass functions of range of the form
+\begin{equation}
+    \Gamma_{i}(D)=\beta_{i}\min\left\{\sigma\left(D;k_{i,1},D_{i,1}\right),\;1-\sigma\left(D;k_{i,2},D_{i,2}\right)\right\},
+    \qquad i\in\{B,R\},
+    \label{eq:range_weight},
+\end{equation}
+where the two logistic factors describe the near and the far boundary of the effective firing band and $\beta_{i}$ is the value of the function inside that band. A firing solution is thus treated as being most valuable in the intermediate range band, where a tracking solution can be established and sustained, and as being less valuable at very short range, where the geometry changes rapidly and an overshoot is imminent, and beyond the far boundary, where hits become improbable.
+
+The relative position reward $r_{rp}$ is the primary shaping term for the angular advantage. It is bounded in $[-w_{rp},w_{rp}]$, and it attains $+w_{rp}$ when the ego aircraft is simultaneously behind the opponent ($\hat{\theta}_{adv}\to0$) and pointing its nose at it ($\hat{\theta}_{tra}\to0$), whereas it attains $-w_{rp}$ when the opponent has established the same advantage over the ego aircraft, because then $\sigma\to1$ and the term reduces to $-1$ independently of $\hat{\theta}_{tra}$. The logistic factor with slope $k_{a}$ and centre $\hat{\theta}_{a}$ separates the offensive and the defensive regime smoothly, so that the term provides a continuous gradient over the whole engagement instead of a binary assessment of the relative geometry.
+
+The closure rate reward $r_{cr}$ complements the angular term by shaping the approach. It is proportional to the closure rate normalized by $V_{ref}$, so that reducing the distance is rewarded while the ego aircraft is in the offensive regime, and it is gated by two logistic factors: the first one removes the reward when the ego aircraft is not behind the opponent, which prevents the agent from being rewarded for closing while it is itself being pursued, and the second one attenuates the reward below the distance $D_{c}$, which discourages the agent from driving into an overshoot. The parameter $D_{c}$ therefore acts as a soft no-overshoot boundary at which the agent is expected to have established a firing position rather than to continue to reduce the distance.
+
+The two aiming terms represent the firing opportunity of the two aircraft. Because the damage inflicted by the gun enters the return only through the outcome of the engagement, these terms provide the dense signal that guides the nose of the aircraft onto the firing line. The aiming reward $r_{gb}$ is active when the track angle falls below the alignment threshold $\hat{\theta}_{g}$, so that it rewards a settled gun solution rather than a mere pointing of the aircraft towards the opponent, and it is weighted by $\Gamma_{B}(D)$ so that the reward is concentrated in the range band where such a solution is sustainable. The opponent aiming penalty $r_{gr}$ mirrors this construction for the adversary: it becomes active when the adverse angle exceeds the threshold $\hat{\theta}_{r}$, that is, when the opponent's nose is aligned with the ego aircraft, and it is weighted by $\Gamma_{R}(D)$, so that it imposes an increasing cost on conceding the offensive position inside the opponent's firing envelope.
+
+Finally, the low-altitude penalty $r_{deck}$ acts as a flight-safety constraint. It is negligible while the aircraft remains above $h_{deck}$ and grows rapidly below that altitude, so that it prevents the policy from trading an excessive amount of altitude for speed or from entering the ground-proximity regime during aggressive manoeuvring. The progressive design of the two stages, together with the terminal terms given below, enables the agent to develop tactically meaningful offensive and defensive behaviour. The structure of the stage-2 reward follows the approach adopted in the ADT project \cite{pope_hierarchical_2023}.
+
+Besides the per-step terms of the two stages, the outcome of the engagement is accounted for by the terminal terms listed in Table~\ref{tab:reward_terminal}, which are applied once when an episode terminates.
+
+\begin{table}[h]
+\caption{Terminal reward terms, applied when an episode terminates.}\label{tab:reward_terminal}%
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}p{0.25\textwidth}p{0.69\textwidth}}
+\toprule
+Terminal term & Mathematical expression \\
+\midrule
+Health margin
+& $r_{hp}=w_{hp}\left(\mathrm{HP}(t_{f})-\mathrm{HP}_{oppo}(t_{f})\right)$ \\[6pt]
+
+Kill bonus
+& $r_{kill}=s_{kill}\,w_{kill}\,\tau_{rem}$ \\[6pt]
+
+Loss penalty
+& $r_{loss}=-\,s_{loss}\,w_{loss}\,\tau_{rem}$ \\
+\botrule
+\end{tabular*}
+\end{table}
+
+In Table~\ref{tab:reward_terminal}, $t_{f}$ denotes the terminal time of the episode, $\tau_{rem}$ the number of decision steps remaining before the maximum episode length is reached, and $s_{kill}$ and $s_{loss}$ are indicators that equal one when the opponent and the ego aircraft are destroyed in the air, respectively. The health margin is evaluated whenever neither aircraft has crashed, and it converts the residual health of the two aircraft into a continuous outcome signal, so that an engagement which reaches the time limit is not scored as a neutral event but reflects the damage exchanged during it. The kill bonus rewards the destruction of the opponent, and the loss penalty penalizes the destruction of the ego aircraft. Since both are proportional to the remaining time, an engagement that is decided early is rewarded, or penalized, more strongly than one that is decided late, which introduces the time pressure that is characteristic of a gun engagement: a firing solution that is obtained early leaves the opponent with less opportunity to reverse the situation, whereas a delayed solution consumes the time budget available for the engagement.
+
+\subsubsection{Reward Composition and Parameter Calibration}
+\label{sec:reward_calibration}
+
+The parameters of the reward functions given in Tables~\ref{tab:reward_stage1}--\ref{tab:reward_terminal} fall into two groups, which are determined in different ways. The first group consists of the thresholds and scaling factors that describe the physical setting: the boundaries of the gun envelope in Eq.~(\ref{eq:wez}), the alignment thresholds and the range bands of the two aiming terms, the reference condition of trimmed flight, and the safety altitude. These quantities characterize the weapon, the flight envelope of the aircraft and the safety requirements of the manoeuvring airspace, and they are therefore fixed by the engagement scenario rather than being free parameters of the learning problem. The second group consists of the weights $w_{\bullet}$ and of the slopes $k_{\bullet}$ of the shaping terms. Since the terms interact, and since their numerical values are meaningful only relative to one another, these coefficients cannot be derived in closed form; they were calibrated iteratively, as described at the end of this subsection.
+
+For the first stage, the reference values are $\delta_a^{\ast}=0$, $\phi^{\ast}=0$ and $\delta_T^{\ast}=0.4$, the last of which is the throttle setting prescribed at the initial condition of every episode. The scaling factors are $s_{sa}=s_{sr}=0.5$, so that a half-deflection aileron command or a bank angle of $0.5$ rad reduces the corresponding term to half of its maximum, and $s_{st}=0.1$, which concentrates the throttle term around the cruise setting and therefore penalizes large throttle excursions strongly. The weights are $w_{st}=8$ and $w_{sa}=w_{sr}=4$. The windows of the two potential-difference terms are $L_{ap}=10$ and $L_{alt}=20$ decision steps, that is, $1$ s and $2$ s of engagement time; a substantially shorter window would react to the numerical noise of the actuator commands, whereas a longer one would delay the response to genuine changes of the flight condition. Their weights are $w_{ap}=4$ and $w_{alt}=8\times10^{4}$, the latter compensating for the small normalized magnitude of the altitude increments, as discussed above.
+
+For the second stage, the transition between the offensive and the defensive regime is centred at $\hat{\theta}_{a}=0.5$, that is, $\theta_{adv}=90^\circ$, with slope $k_{a}=18$, which spreads the transition over approximately $40^\circ$ and thereby avoids a discontinuous interpretation of the relative geometry. The closure rate is normalized by $V_{ref}=500$ ft/s, a value representative of the closing speeds encountered by the modelled aircraft in within-visual-range engagements, so that a typical approach produces a term of order unity; the no-overshoot attenuation is centred at $D_{c}=2900$ ft with slope $k_{D}=1/500$ ft$^{-1}$, so that the term is essentially removed inside the range where a tracking solution should already have been established. The alignment thresholds follow the geometry of the weapon: the aiming reward uses $\hat{\theta}_{g}=1/180$ together with $k_{g}=10^{5}$, so that it is active only when the nose is aligned with the firing line to within about $1^\circ$, whereas the opponent aiming penalty uses $\hat{\theta}_{r}=178/180$ with $k_{r}=800$, so that it grows as soon as the opponent's nose approaches the ego aircraft, with a gentler slope that provides a usable gradient before the opponent's firing solution is complete. The range weighting functions of Eq.~(\ref{eq:range_weight}) use $\beta_{B}=\beta_{R}=2.5$, $D_{B,1}=1000$ ft, $D_{B,2}=2900$ ft, $D_{R,1}=400$ ft and $D_{R,2}=4100$ ft, with slopes $k_{B,1}=k_{B,2}=1/50$ ft$^{-1}$, $k_{R,1}=1/35$ ft$^{-1}$ and $k_{R,2}=1/200$ ft$^{-1}$. The bands of the two functions thus occupy the middle of the corresponding firing ranges and retain a margin at both ends, which reflects the fact that a firing solution is transient at very short range and uncertain near the far boundary. The weight of the relative position term is $w_{rp}=1$, so that this term defines the unit of the tactical shaping scale, whereas the low-altitude penalty uses $w_{deck}=4$, that is, four times that unit, together with $h_{deck}=1300$ ft and $k_{h}=1/20$ ft$^{-1}$. The larger weight is deliberate, because entering this regime endangers the aircraft and therefore dominates any tactical consideration, while the threshold lies well below the altitude band in which the engagements are initialized ($10000\pm1000$ ft), so that the term remains inactive during normal manoeuvring. The terminal terms use $w_{hp}=10$, $w_{kill}=3.7$ and $w_{loss}=1$. With $\mathrm{HP}_{0}=3$, the health margin spans $\pm30$, whereas the kill bonus reaches approximately $2200$ when the opponent is destroyed at the beginning of an episode. The outcome of the engagement therefore dominates the accumulated shaping reward, which is essential in the present setting: because the gun inflicts damage continuously and the result of an engagement is decided by the residual health, a return dominated by per-step terms could be accumulated without ever resolving the engagement, a behaviour that the high proportion of drawn episodes reported in Section~\ref{sec:eval_benchmark} would otherwise encourage.
+
+Because these coefficients interact, they were calibrated iteratively rather than optimized, by adjusting a small number of them at a time and inspecting the resulting behaviour both in the training curves and in the statistics of the evaluation episodes. The diagnostics used for this purpose are the per-term reward averages, which are recorded separately for every component during evaluation, together with the outcome statistics of the engagement, namely the win, draw and loss rates, the proportion of the engagement time during which the opponent remains inside the WEZ, the mean track angle, and the crash rate. The following observations determined the direction of the adjustments. When the recorded trajectories exhibited sustained oscillation of the control surfaces or an unsteady altitude trace, the weights of the corresponding rate terms, $w_{ap}$ and $w_{alt}$, were increased until the oscillations disappeared; conversely, when the agent became reluctant to manoeuvre and the engagements degenerated into long-range circling, these weights were reduced, because an excessive smoothness penalty suppresses the aggressive manoeuvring that the tactical terms are intended to encourage. When the policy retained a residual bank angle or an off-trim throttle setting, the weights of the corresponding asymptotic terms, $w_{sr}$, $w_{sa}$ and $w_{st}$, were increased. In the second stage, when the agent learned to point its nose at the opponent but failed to reduce the distance, the closure term was strengthened by increasing $w_{cr}$; when the recorded trajectories showed repeated overshoots at close range, that is, a rapid reversal of the closure rate after the distance had decreased below the gun range, $D_{c}$ was moved closer to the effective firing band and the weight of the aiming reward was increased, so that a settled firing solution was rewarded rather than the mere approach. When the agent spent a substantial part of the engagement in front of the opponent without attempting to disengage, the opponent aiming penalty was extended to longer ranges by increasing $D_{R,2}$ and its amplitude $\beta_{R}$ was increased, so that the cost of conceding the offensive position became comparable to the benefit provided by the angular terms. When the proportion of crashed episodes was not negligible, $h_{deck}$ was raised until the aircraft stopped entering the low-altitude regime. Finally, when the shaping terms indicated that the agent had learned to hold the offensive position while the proportion of drawn engagements remained high, $w_{kill}$ and $w_{hp}$ were increased, so that deciding the engagement replaced the accumulation of shaping reward as the dominant objective of the policy.
+
+Each adjustment was validated by retraining the policy and re-evaluating it against a fixed set of opponents; an adjustment was retained only when it improved the outcome statistics without increasing the crash rate or degrading the quality of the flight, and it was reverted otherwise. The values reported above are those retained by this procedure, and they are listed together with the remaining experimental settings in Section~\ref{sec:experiment}. It should be noted that these values reflect the balance between the terms discussed in this section rather than a unique optimum, and they are reported in full so that the reward structure can be reproduced.
 
 \subsubsection{Opponent Curriculum}
 \label{sec:opponent_curriculum}
@@ -631,26 +687,29 @@ The initialization of the opponent pool is critical for stable policy learning. 
 The goalpoint model is defined as follows: from an arbitrary initial state, the aircraft will fly toward a randomly generated target point in space. Its observation consists of the ego aircraft state together with the geometric relationship between the aircraft and the target point. Instead of using the absolute coordinates of the target point, the model takes relative features as input, including relative azimuth, elevation, and distance. This design prevents the policy from memorizing specific spatial locations.
 
 To facilitate the learning of this navigation task, a composite reward function is designed. 
-Four general reward terms are used, namely the aileron command penalty, action smoothness penalty, closure rate reward, and low-altitude penalty, as detailed in Tables~\ref{tab:reward_stage1} and~\ref{tab:reward_stage2}. 
+Four general reward terms are used, namely an aileron magnitude penalty, an action smoothness penalty, a low-altitude penalty, and a closure-rate error term. The first two and the low-altitude penalty are of the same form as the corresponding terms of Tables~\ref{tab:reward_stage1} and~\ref{tab:reward_stage2}, whereas the closure-rate error term is specific to this auxiliary task: it is an asymptotic error potential whose target is a prescribed closure rate $V_{c}^{\ast} = 700$ ft/s, so that the aircraft approaches the target point at a moderate rate instead of accelerating towards it. The parameters of these four terms are $w_{ail}=1.0$ for the aileron magnitude penalty, $w_{ap}=3.5$ with $L_{ap}=10$ for the action smoothness penalty, $w_{deck}=4$, $h_{deck}=1300$ ft and $k_{h}=1/20$ ft$^{-1}$ for the low-altitude penalty, and $V_{c}^{\ast}=700$ ft/s with scaling factor $s=800$ ft/s and unit weight for the closure-rate error term.
 In addition to these terms, the reward function incorporates two task-specific components to actively guide the aircraft: a distance reward and a heading reward. 
 Both components are computed using a scaled asymptotic error form,
 \begin{equation}
-    r_i = \alpha_i \left(1 - \frac{|x_i - x_i^\ast|/s_i}{|x_i - x_i^\ast|/s_i + 1}\right)
-        = \alpha_i \frac{s_i}{|x_i - x_i^\ast| + s_i},
+    r_i = w_i \left(1 - \frac{|x_i - x_i^\ast|/s_i}{|x_i - x_i^\ast|/s_i + 1}\right)
+        = w_i \frac{s_i}{|x_i - x_i^\ast| + s_i},
+    \label{eq:goalpoint_general}
 \end{equation}
-where $x_i$ is the current value of the corresponding variable, $x_i^\ast$ is the target value, $s_i$ is the scaling factor, and $\alpha_i$ is the component weight.
+where $x_i$ is the current value of the corresponding variable, $x_i^\ast$ is the target value, $s_i$ is the scaling factor, and $w_i$ is the weight of the component. The form of Eq.~(\ref{eq:goalpoint_general}) is identical to that of the first three terms of Table~\ref{tab:reward_stage1}, so that the same interpretation applies: each component equals its weight $w_i$ when the corresponding error vanishes, retains half of that value when the error equals $s_i$, and decays smoothly for larger errors without introducing a singularity.
 
-For the distance reward, the target distance is zero, i.e., $x_i^\ast=0$. Let $d_t$ denote the relative distance between the aircraft and the target point in feet. The distance reward is defined as
+For the distance reward, the target distance is zero, i.e., $x_i^\ast=0$. Let $d(t)$ denote the relative distance between the aircraft and the target point in feet. Following Eq.~(\ref{eq:goalpoint_general}), the distance reward is defined as
 \begin{equation}
-    r_{\mathrm{dist}}(t) = 4.0 \cdot \frac{2000}{d(t) + 2000}.
+    r_{\mathrm{dist}}(t) = w_{\mathrm{dist}}\frac{s_{\mathrm{dist}}}{d(t) + s_{\mathrm{dist}}},
+    \label{eq:goalpoint_dist}
 \end{equation}
-This term provides a dense guidance signal that monotonically increases as the relative distance between the aircraft and the target point decreases.
+where $w_{\mathrm{dist}} = 4.0$ and $s_{\mathrm{dist}} = 2000$ ft. The scaling factor is comparable to the separation at which the target points are generated, which are placed several thousand feet away from the aircraft in the horizontal plane and between $8000$ and $20000$ ft in altitude, so that the term retains an informative gradient over the whole approach and decays smoothly as the target point is reached; the large weight makes this term the dominant component of the reward of the auxiliary task, so that reaching the target point, rather than refining the flight condition, is its primary objective.
 
-For the heading reward, since the desired heading error is zero, the heading reward is given by
+For the heading reward, since the desired heading error is zero, the reward is likewise given by
 \begin{equation}
-    r_{\mathrm{head}}(t) = \frac{0.2}{|\theta_{tra}(t)| + 0.2}.
+    r_{\mathrm{head}}(t) = w_{\mathrm{head}}\frac{s_{\mathrm{head}}}{|\theta_{tra}(t)| + s_{\mathrm{head}}},
+    \label{eq:goalpoint_head}
 \end{equation}
-This term incentivizes the agent to align its orientation with the target, yielding higher returns when the aircraft flies directly toward the goal point.
+where $\theta_{tra}(t)$ is the angle between the nose of the aircraft and the line of sight to the target point, and the parameters are $w_{\mathrm{head}} = 0.2$ and $s_{\mathrm{head}} = 0.2$ rad, that is, approximately $11.5^\circ$. The scaling factor is comparable to the angular offset that the aircraft must remove in order to fly towards a target point, and the resulting term decreases from its maximum of $1$ when the aircraft points directly at the target point to approximately $0.1$ when the target point lies abeam, so that it acts as a persistent pointing signal which refines the direction of the flight without competing with the distance term, whose weight is twenty times larger. The target point is considered to be reached when the distance falls below $500$ ft, at which point the episode terminates.
 
 In this work, the goalpoint model is pretrained separately using PPO, and the target point is randomly reset at every episode. The resulting goalpoint policy can guide the aircraft toward arbitrary target locations in the airspace using smooth control commands. Using this pretrained goalpoint model as the opponent, a batch of preliminary combat-capable models is trained by applying the reward function detailed in Table~\ref{tab:reward_stage2}. These policies are then evaluated according to their training curves, flight safety, and behavioral characteristics. Models with reliable training performance, low crash frequency, clear offensive or evasive behaviors, and diverse maneuvering styles are selected to form the initial protected opponent set. In this way, the initialized opponent pool contains not only the original goalpoint policy, but also several derived opponents that already possess basic maneuvering and combat interaction capability. Compared with initializing the pool using only handcrafted opponents, this procedure provides a broader opponent distribution. Furthermore, because the navigation targets of all opponents within the pool can be flexibly overridden, the system can seamlessly implement the opponent curriculum by toggling opponent behaviors between low threat and high threat. Combined with the objective curriculum, this integrated pipeline systematically guides the agent from basic flight control to complex air combat mastery.
 % As a result, the dynamic opponent pool obtains richer adversarial diversity at the early stage of training, which provides a more effective initialization for the subsequent incorporation of historically strong policies.
