@@ -6,6 +6,7 @@ logs/
 experiments/
 opponent_pool/
 base_opponent_model/
+base_opponent_model_weakinit/
 condaenv*
 .output*
 *.npz

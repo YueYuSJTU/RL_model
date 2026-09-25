@@ -1,0 +1,93 @@
+# ============================================================================
+# 消融实验 B 臂：弱能力初始化（仅去掉 goalpoint 模型）
+#
+# 单进程两阶段（stage1 -> battle），臂内唯一变量 = battle 阶段的对手池初始化：
+#   * stage1（300k 步）：对手池 = base_opponent_model 的 1/2/3（与对照、A 臂完全一致）。
+#   * battle（30 cycles × 10M 步）：对手池 =
+#       id 1 <- opponent_pool/pool2/3   md5 469281b7897bc9c304153f0e1b0bf8ea
+#               (TrackingInitTask stage3，平飞/不追踪型)
+#       id 2 <- base_opponent_model/2   md5 978e3666bf41473618f04c764b6d4a8e (20250710_212837)
+#       id 3 <- base_opponent_model/3   md5 3543907abceaca018f3f1219fdfba141 (20250713_125657)
+#     whitelist = ['1','2','3']（3 受保护 + 1 动态槽，与对照 BDC-MLP 完全同构）
+#
+# 与对照的唯一差别：对照的 id 1 是 goalpoint 模型（md5 83041d60…），本臂换成平飞型对手。
+#
+# 运行：
+#   python -m src.training.train --config configs/ablation/weakinit_nogoalpoint.yaml \
+#       --exp_name weakinit_nogoalpoint
+# 时长：stage1 ≈ 2 分钟 + 30 cycles ≈ 20 h。
+# ============================================================================
+agent:
+  algorithm: PPO
+  batch_size: 128
+  clip_range: 0.2
+  clip_range_vf: null
+  device: cuda
+  ent_coef: 0.0
+  gae_lambda: 0.95
+  gamma: 0.99
+  learning_rate: 0.0001
+  max_grad_norm: 0.5
+  n_epochs: 10
+  n_steps: 2048
+  name: ppo_1layer
+  policy: MlpPolicy
+  policy_kwargs:
+    net_arch:
+    - 12288
+    share_features_extractor: true
+  verbose: 0
+  vf_coef: 0.5
+env_base:
+  clip_obs: 10.0
+  norm_obs: false
+  norm_reward: false
+  plane: F16
+  render_mode: null
+  task: TrackingTask
+  use_vec_normalize: false
+# stage1 使用的池（= 对照同款，两臂共用）
+opponent_pool:
+  base_dir: ./base_opponent_model
+  max_pool_size: 4
+  opponents:
+  - '1'
+  - '2'
+  - '3'
+  pool_subdir: opponent_pool
+  whitelist:
+  - '1'
+  - '2'
+  - '3'
+stage1:
+  env:
+    shape: stage1
+  eval_freq: 1000
+  log_root: ./experiments
+  num_cpu: 30
+  seed: 42
+  total_timesteps: 300000
+stage2:
+  battle_cycles: 30
+  battle_step: 10000000
+  env:
+    shape: stage2
+  eval_freq: 50000
+  log_root: ./experiments
+  n_episodes_eval: 50
+  num_cpu: 30
+  seed: 42
+  threshold_timesteps: 20000000
+  update_freq_episodes: 1000
+  # ---- battle 阶段覆盖池（本 arm 的核心变量）----
+  opponent_pool:
+    base_dir: ./base_opponent_model_weakinit
+    max_pool_size: 4
+    opponents:
+    - '1'
+    - '2'
+    - '3'
+    whitelist:
+    - '1'
+    - '2'
+    - '3'

@@ -108,7 +108,19 @@ class UnifiedTrainer:
             logging.info(f"Starting new training run in: '{self.train_path}'")
             save_config(self.full_config, self.train_path, "full_config.yaml")
 
-    def _setup_experiment_opponent_pool(self, cfg: Dict[str, Any]) -> str:
+    def _setup_experiment_opponent_pool(self, cfg: Dict[str, Any], clear: bool = False) -> str:
+        """Builds the per-experiment opponent pool from a pool config dict.
+
+        Args:
+            cfg: opponent_pool mapping (base_dir / opponents / pool_subdir / ...).
+            clear: if True, wipe the pool directory first. Required when a later
+                stage (battle) re-seeds the same experiment with a different pool:
+                stale ids that are not listed in ``opponents`` would otherwise
+                survive and silently join the pool.
+
+        Special value ``base_dir: "@self_stage1"`` seeds the pool from THIS run's
+        own stage1 checkpoint (used by the "pure self-play initialization" arm).
+        """
         if not isinstance(cfg, dict):
             raise ValueError("opponent_pool must be a mapping/dict")
 
@@ -119,16 +131,30 @@ class UnifiedTrainer:
         if not opponents or not isinstance(opponents, (list, tuple)):
             raise ValueError("opponent_pool.opponents must be a non-empty list")
 
-        base_dir_abs = os.path.abspath(base_dir)
-        if not os.path.isdir(base_dir_abs):
-            raise FileNotFoundError(f"base opponent dir not found: {base_dir_abs}")
+        self_seed = str(base_dir) == "@self_stage1"
+        if self_seed:
+            if not self.last_best_model_path:
+                raise ValueError(
+                    "base_dir='@self_stage1' requires a preceding normal stage in the same run"
+                )
+            base_dir_abs = os.path.dirname(self.last_best_model_path)
+            if not os.path.isdir(base_dir_abs):
+                raise FileNotFoundError(f"self stage1 dir not found: {base_dir_abs}")
+        else:
+            base_dir_abs = os.path.abspath(base_dir)
+            if not os.path.isdir(base_dir_abs):
+                raise FileNotFoundError(f"base opponent dir not found: {base_dir_abs}")
 
         exp_pool_root = os.path.join(self.train_path, pool_subdir)
+        if clear and os.path.isdir(exp_pool_root):
+            logging.info(f"[opponent_pool] Clearing existing pool at: {exp_pool_root}")
+            shutil.rmtree(exp_pool_root)
         os.makedirs(exp_pool_root, exist_ok=True)
 
         for opp_id in opponents:
             opp_id = str(opp_id)
-            src = os.path.join(base_dir_abs, opp_id)
+            # For the self-seed token every requested id points at the same ckpt.
+            src = base_dir_abs if self_seed else os.path.join(base_dir_abs, opp_id)
             dst = os.path.join(exp_pool_root, opp_id)
             if not os.path.isdir(src):
                 raise FileNotFoundError(f"base opponent id dir not found: {src}")
@@ -137,7 +163,10 @@ class UnifiedTrainer:
             shutil.copytree(src, dst)
 
         logging.info(f"[opponent_pool] Using per-experiment pool at: {exp_pool_root}")
-        logging.info(f"[opponent_pool] Seeded from base: {base_dir_abs} (ids={list(map(str, opponents))})")
+        logging.info(
+            f"[opponent_pool] Seeded from {'SELF stage1 ckpt' if self_seed else 'base'}: "
+            f"{base_dir_abs} (ids={list(map(str, opponents))})"
+        )
         return exp_pool_root
 
     def run(self):
@@ -334,6 +363,23 @@ class UnifiedTrainer:
         # --- Update PoolManager with config ---
         if isinstance(self.opponent_pool_cfg, dict) and self.opponent_pool_cfg.get("max_pool_size") is not None:
             self.pool_manager.max_pool_size = int(self.opponent_pool_cfg["max_pool_size"])
+
+        # --- Optional battle-stage opponent-pool override ---
+        # Allows stage1 and the battle stage to use DIFFERENT initial pools inside a
+        # single run (needed for the opponent-pool-initialization ablation, where
+        # stage1 must stay identical across arms while the battle pool differs).
+        # Backward compatible: configs without a stage-level `opponent_pool` key are
+        # unaffected.
+        battle_pool_cfg = stage_cfg.get("opponent_pool")
+        if isinstance(battle_pool_cfg, dict):
+            logger.info(f"[opponent_pool] Battle-stage override detected: {battle_pool_cfg}")
+            self.opponent_pool_cfg = battle_pool_cfg
+            self.pool_path = self._setup_experiment_opponent_pool(battle_pool_cfg, clear=True)
+            self.pool_manager = PoolManager(
+                pool_path=self.pool_path,
+                max_pool_size=int(battle_pool_cfg.get("max_pool_size", 8)),
+                whitelist=battle_pool_cfg.get("whitelist") or [],
+            )
 
         # --- Load configs (unified with shared sections) ---
         base_env = self.full_config.get("env_base") or {}
