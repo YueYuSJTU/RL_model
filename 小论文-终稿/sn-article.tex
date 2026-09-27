@@ -976,6 +976,67 @@ Figure \ref{fig:3d_trajectories} illustrates four representative basic fighter m
 
 These representative cases suggest that the BDC method is able to spontaneously develop diverse maneuvering strategies according to relative position, speed, and energy state. 
 
+\subsection{Opponent Pool Initialization Ablation}
+\label{sec:init_ablation}
+
+The dynamic opponent pool of Section~\ref{sec:dynamic_opponent_pool} combines a protected initialization with a set of dynamic slots that are periodically refreshed. To isolate the contribution of the initialization, we compare two arms that differ only in whether the pool is seeded with externally pretrained opponents. In the with-initialization arm the pool is seeded with a goal-point navigation policy together with two combat-capable policies derived from it, all three protected, which leaves one refreshable slot and reproduces the configuration used by the proposed method. In the without-initialization arm the pool initially contains a single model, namely the arm's own stage-1 checkpoint, and no protected opponent, so that all four slots are refreshable from the first update onwards. Everything else is held fixed. Each arm is trained for $3.0\times10^8$ steps, and is then evaluated on the benchmark pool of Section~\ref{sec:eval_benchmark} with $1000$ engagements per opponent and randomized initial states.
+
+Figure~\ref{fig:init_ablation_stability} shows the evolution of the evaluation return during the battle stage. The two arms differ both in how long the return keeps improving and in the level at which it settles. With initialization the return rises steadily through the first part of training, from $195$ in the $10^7$-step window ending at $1.5\times10^7$ steps to about $1250$ at $6.5\times10^7$ steps, that is by a factor of more than six over the first $8\times10^7$ steps, and it stays at a comparable or higher level afterwards, oscillating between roughly $400$ and $1300$ without a further systematic trend. Without initialization the return reaches $539$ in the window ending at $2\times10^7$ steps, which remains its highest value of the whole run, and it shows no further improvement after $5\times10^7$ steps: the average over the windows covering $5\times10^7$ to $1.0\times10^8$ steps is $350$, below the average of $390$ over the first five windows, and the return declines further towards the end of training. Once training has settled, the two arms therefore differ in level as well as in the duration of the improvement: over the last $10^8$ steps, from $2.1\times10^8$ to $3.0\times10^8$ steps, the mean evaluation return is $744$ with initialization against $275$ without, a factor of about $2.7$.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{graph/init_ablation_stability.png}
+\caption{Training stability of the two arms over the $3.0\times10^8$ steps of the battle stage, showing the exponentially smoothed evaluation return. The curves start after the stage-1 pretraining, which is identical in the two arms. Without external initialization the return stops improving after the first few cycles and settles at a markedly lower level than with initialization.}
+\label{fig:init_ablation_stability}
+\end{figure}
+
+Table~\ref{tab:init_ablation_results} reports the outcome distribution and the air-combat metrics on the benchmark.
+
+\begin{table}[h]
+\caption{Effect of opponent pool initialization on the benchmark of Section~\ref{sec:eval_benchmark} ($8\times1000$ engagements per arm). $\Delta$HP is the mean difference in remaining health points between the ego and the opponent at the end of an engagement.}
+\label{tab:init_ablation_results}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lccccc}
+\toprule
+Arm & Win rate & Draw & Loss & Gun opportunity & $\Delta$HP\\
+\midrule
+With initialization & $42.49\%$ & $57.2\%$ & $0.26\%$ & $0.156$ & $+1.80$\\
+Without initialization & $14.44\%$ & $84.1\%$ & $1.48\%$ & $0.078$ & $+0.99$\\
+\botrule
+\end{tabular*}
+\end{table}
+
+The two arms differ by $28.1$ percentage points in win rate, and the same separation appears in every secondary metric: the gun-opportunity ratio, that is the fraction of the engagement time during which the opponent remains inside the weapon engagement zone, falls from $0.156$ to $0.078$, the mean health margin at the end of an engagement falls from $+1.80$ to $+0.99$, and the mean total damage inflicted on the opponent falls from $2.02$ to $1.32$.
+
+\begin{table}[h]
+\caption{Win rate of each arm against the four opponent types of the benchmark pool, which contains four level-flight, two early-combat, one goal-point and one weak-reference opponent.}
+\label{tab:init_ablation_bytype}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lcccc}
+\toprule
+Arm & Level flight & Early combat & Goal point & Weak reference\\
+\midrule
+With initialization & $66.6\%$ & $30.6\%$ & $5.0\%$ & $7.3\%$\\
+Without initialization & $25.1\%$ & $6.7\%$ & $1.6\%$ & $0.1\%$\\
+\botrule
+\end{tabular*}
+\end{table}
+
+The breakdown by opponent type (Table~\ref{tab:init_ablation_bytype}) localizes the failure. Against the four non-manoeuvring level-flight opponents the without-initialization arm still wins $25.1\%$ of the engagements, but its win rate falls to $6.7\%$ against the two early combat opponents and to $1.6\%$ against the goal-point policy, that is, precisely against the opponents that manoeuvre in order to deny a firing solution; with initialization the same sequence only degrades from $66.6\%$ to $30.6\%$ and $5.0\%$. The degradation is thus concentrated on the opponents that manoeuvre rather than being uniform across the pool, and the per-opponent win rates of Figure~\ref{fig:init_ablation_outcomes} show the same pattern on every individual opponent. A comparison between the two arms alone points in the same direction without involving the benchmark: over $300$ engagements in each direction, the with-initialization arm wins $4.0\%$ of the engagements and loses none, with a mean health margin of $+0.81$, whereas the without-initialization arm wins none of the 300 engagements in the opposite direction ($0.0\%$), finishes at $-0.83$ health points and obtains only about one seventh of the gun-opportunity time of its opponent.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{graph/init_ablation_wdl.png}\\[2pt]
+\includegraphics[width=0.95\linewidth]{graph/init_ablation_heatmap.png}
+\caption{Benchmark outcomes without and with opponent pool initialization. Top: win, draw and loss distribution over the eight benchmark opponents. Bottom: per-opponent win rate, with the opponents numbered $1$--$8$ in the order of the benchmark pool: one goal-point policy, two early-combat policies, four level-flight policies and one weak reference policy.}
+\label{fig:init_ablation_outcomes}
+\end{figure}
+
+The refresh statistics of the pool provide a direct view of the adversarial signal. Every refresh of the pool is decided by an evaluation in which the current snapshot is matched against the pool members. In the without-initialization arm, $108$ such comparisons were performed during training; the challenger achieved a mean win rate of $0.26\%$, $99.7\%$ of the engagements ended in a draw, and only four comparisons contained any engagement that the challenger won. The pool was nevertheless refreshed $27$ times, because the update rule also rewards small differences in remaining health, whose mean value was $+0.03$ health points. These numbers are consistent with a pool that progressively loses its ability to discriminate between policies, and with a policy that settles into an equilibrium in which engagements rarely produce a decision: the final pool of that arm plays $100\%$ draws against itself, with almost identical remaining health on both sides ($2.74$ against $2.77$) and a gun-opportunity ratio of $1.9\%$. In the with-initialization arm, by contrast, the three protected opponents remain external throughout training, and its single refreshable slot stopped being replaced only in the last four cycles.
+
+Overall, the results of this ablation indicate that the initialization of the opponent pool has a substantial influence on the outcome of training in the setting studied here. When the pool contains only the agent's own early checkpoint, its refresh statistics suggest that the pool rarely produces a decisive comparison between policies, the evaluation return ceases to improve early and settles at a markedly lower level, and the policy obtained at the end of training performs considerably worse on the benchmark, in particular against the opponents that manoeuvre. Curriculum learning and the periodic refresh both operate on top of the pool and, in this experiment, they did not compensate for the absence of an external anchor.
+
+
 \section{Conclusion}
 \label{sec:conclusion}
 

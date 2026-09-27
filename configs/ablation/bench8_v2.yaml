@@ -1,0 +1,122 @@
+benchmark: bench8-v2
+created: '2026-09-26'
+purpose: 初始化消融及后续所有评测统一使用的 8 对手基准；与旧 opponent_pool/test_pool 逐槽位同构，但全部为未参与训练的中立模型
+supersedes: opponent_pool/test_pool（旧 8 对手；其 1/2/3 与 23 参与了三臂训练）
+excluded_by_md5:
+  base_opponent_model/1 (goalpoint): 83041d60afcb0efa6a599d188922939c
+  base_opponent_model/2 (0710): 978e3666bf41473618f04c764b6d4a8e
+  base_opponent_model/3 (0713): 3543907abceaca018f3f1219fdfba141
+  opponent_pool/pool2/3: 469281b7897bc9c304153f0e1b0bf8ea
+eval_protocol: Evaluator.run_match，1000 局/对阵，初始态势随机化，goal_point_prob=0（对手以 jsbsim
+  模式追逐）
+selection_criterion: 按旧 8 对手的槽位角色（goalpoint / 2×早期空战 / 4×平飞 / 1×弱参照）对位，并用与论文 tab:bench_behaviour
+  相同的协议实测飞行行为，取最贴近者
+runner: python scripts/ablation/eval_ablation.py --set bench8 --episodes 1000 --shards
+  12 --shard <i>
+note_needs_shim: 'needs_shim=true 的老格式模型由 scripts/ablation/build_bench8_v2.py 生成 shim（软链
+  + 补 algorithm: PPO），不修改原目录'
+opponents:
+- name: NB1-goalpoint(0918)
+  old_slot_role: 1  (goalpoint policy)
+  path: experiments/goal_point/20250918_095027/stage1/20250918_095027_GoalPointTask_ppo_1layer
+  task: GoalPointTask
+  shape: stage1
+  md5: 448ab7229668d3950e6ef4d8c56b3360
+  needs_shim: true
+  measured:
+    bank_mean_abs: 87.181
+    climb_rate_mean: -395.11
+    ctrl_elevator_mean: 1.0
+    speed_mean: 1026.799
+    los_closure_mean: 118.554
+- name: NB2-combat(0715_105409)
+  old_slot_role: 2  (combat 0710)
+  path: experiments/20250715_105409/stage2/20250715_105533_TrackingTask_ppo_1layer1
+  task: TrackingTask
+  shape: stage2
+  md5: 2b4e8d31fe4da49103ef4178433e0431
+  needs_shim: true
+  measured:
+    bank_mean_abs: 130.744
+    climb_rate_mean: -33.133
+    ctrl_elevator_mean: 0.993
+    speed_mean: 406.218
+    los_closure_mean: -841.625
+- name: NB3-combat(0716_220909)
+  old_slot_role: 3  (combat 0713)
+  path: experiments/20250716_220909/stage2/20250716_221041_TrackingTask_ppo_1layer1
+  task: TrackingTask
+  shape: stage2
+  md5: 8642c426e91df50837a93b804ab3625a
+  needs_shim: true
+  measured:
+    bank_mean_abs: 79.313
+    climb_rate_mean: -37.784
+    ctrl_elevator_mean: 0.07
+    speed_mean: 434.423
+    los_closure_mean: -396.829
+- name: NB4-level-flight(st3/pool2-11)
+  old_slot_role: 11 (level-flight st3)
+  path: opponent_pool/pool2/11
+  task: TrackingInitTask
+  shape: stage3
+  md5: f384cbe5e16560874bba445018b5432b
+  needs_shim: false
+  measured:
+    bank_mean_abs: 5.054
+    climb_rate_mean: 39.038
+    ctrl_elevator_mean: -0.066
+    speed_mean: 565.771
+    los_closure_mean: -357.518
+- name: NB5-level-flight(st4/pool2-16)
+  old_slot_role: 16 (level-flight st4)
+  path: opponent_pool/pool2/16
+  task: TrackingInitTask
+  shape: stage4
+  md5: 1eada38e07bba927df55af0be8433115
+  needs_shim: false
+  measured:
+    bank_mean_abs: 24.153
+    climb_rate_mean: -7.744
+    ctrl_elevator_mean: -0.078
+    speed_mean: 699.798
+    los_closure_mean: -548.63
+- name: NB6-level-flight(st5/pool2-17)
+  old_slot_role: 17 (level-flight st5)
+  path: opponent_pool/pool2/17
+  task: TrackingInitTask
+  shape: stage5
+  md5: 28c6637f7abd5ef94e3031cd77aa0219
+  needs_shim: false
+  measured:
+    bank_mean_abs: 10.191
+    climb_rate_mean: 66.606
+    ctrl_elevator_mean: -0.105
+    speed_mean: 508.869
+    los_closure_mean: -340.67
+- name: NB7-level-flight(st4/pool2-7)
+  old_slot_role: 23 (level-flight st3)
+  path: opponent_pool/pool2/7
+  task: TrackingInitTask
+  shape: stage4
+  md5: 3697ee0f039d6e8d5441fa8e713f536c
+  needs_shim: false
+  measured:
+    bank_mean_abs: 29.781
+    climb_rate_mean: 33.834
+    ctrl_elevator_mean: -0.113
+    speed_mean: 618.09
+    los_closure_mean: -273.505
+- name: NB8-weakref(best_models/8)
+  old_slot_role: 616 (old Baseline)
+  path: opponent_pool/best_models/8
+  task: TrackingTask
+  shape: stage2
+  md5: e30972740b66e9ea24162196ab7a2834
+  needs_shim: false
+  measured:
+    bank_mean_abs: 53.647
+    climb_rate_mean: 14.307
+    ctrl_elevator_mean: -0.748
+    speed_mean: 459.289
+    los_closure_mean: -400.955

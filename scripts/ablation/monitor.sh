@@ -78,8 +78,9 @@ for st in stage2 stage1; do
     echo "  $st/metrics: $(ls "$RUN/$st/metrics" 2>/dev/null | tr '\n' ' ')"
     [ -f "$RUN/$st/metrics/progress.csv" ] && echo "    progress.csv 大小: $(stat -c %s "$RUN/$st/metrics/progress.csv") bytes"
 done
-echo "  每 cycle 曲线:"
-ls -la "$RUN"/tensorboard/battle/PPO_0/ 2>/dev/null | awk 'NR>3 {print "    ", $5, $9}'
+echo "  每 cycle 曲线（实际落盘路径 tensorboard/<ts>/PPO_*/）:"
+ls -d "$RUN"/tensorboard/*/PPO_*/ 2>/dev/null | sed "s|^|    目录: |"
+echo -n "    cycle event 文件数: "; ls "$RUN"/tensorboard/*/PPO_*/events.out.tfevents* 2>/dev/null | wc -l
 echo "  最新 cycle 的 evaluations.npz:"
 ls -la "$RUN"/stage2/*cycle*/evaluations.npz 2>/dev/null | tail -2 | awk '{print "    ", $5, $9}'
 echo "  课程进度(stdout 日志最后一条):"

@@ -1,0 +1,29 @@
+% 由 scripts/ablation/make_paper_tables.py 自动生成，请勿手改
+
+\begin{table}[h]
+\caption{Effect of opponent pool initialization on the benchmark of Section~\ref{sec:eval_benchmark} ($8\times1000$ engagements per arm). $\Delta$HP is the mean difference in remaining health points between the ego and the opponent at the end of an engagement.}
+\label{tab:init_ablation_results}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lccccc}
+\toprule
+Arm & Win rate & Draw & Loss & Gun opportunity & $\Delta$HP\\
+\midrule
+With initialization & $42.49\%$ & $57.2\%$ & $0.26\%$ & $0.156$ & $+1.80$\\
+Without initialization & $14.44\%$ & $84.1\%$ & $1.48\%$ & $0.078$ & $+0.99$\\
+\botrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[h]
+\caption{Win rate of each arm against the four opponent types of the benchmark pool, which contains four level-flight, two early-combat, one goal-point and one weak-reference opponent.}
+\label{tab:init_ablation_bytype}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lcccc}
+\toprule
+Arm & Level flight & Early combat & Goal point & Weak reference\\
+\midrule
+With initialization & $66.6\%$ & $30.6\%$ & $5.0\%$ & $7.3\%$\\
+Without initialization & $25.1\%$ & $6.7\%$ & $1.6\%$ & $0.1\%$\\
+\botrule
+\end{tabular*}
+\end{table}

@@ -1,7 +1,8 @@
 # 对手池初始化消融实验（Opponent Pool Initialization Ablation）
 
 本轮只跑两个 arm（BDC-MLP 对照重训、第三臂「4 空槽」、中立 held-out 评测集见 §7）。
-**状态：两个 arm 已于 2026-09-24 22:58:59 启动，正在跑（stage1 已完成，处于 battle cycle 1）。**
+**状态：两个 arm 均已完成 30/30 cycles（A 38.6 h、B 37.6 h，exit 0，零 Traceback）。**
+**结果汇总见 [`RESULTS_A_vs_B.md`](RESULTS_A_vs_B.md)；每个 run 目录下有 `POOL_HISTORY.md`（池演化全量记录）。**
 
 | arm | 运行目录 | stdout 日志 |
 |---|---|---|
