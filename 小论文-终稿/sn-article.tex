@@ -768,7 +768,83 @@ By contrast, the BDC method gradually increases task difficulty through the curr
 \subsubsection{Benchmark Pool Evaluation}
 \label{sec:eval_benchmark}
 
-To evaluate the generalization ability and tactical performance of the models, we construct a standardized benchmark opponent pool. This evaluation pool contains eight opponent policies covering diverse engagement styles, including aggressive, evasive, and random-maneuvering behaviors. These benchmark opponents are selected snapshots obtained from various training iterations and configurations. Their diverse tactical styles are induced by adjusting the relative weights of reward terms and varying the initial engagement geometries during their training. For instance, policies trained from advantageous initial positions tend to develop aggressive offensive tactics, whereas those initialized in disadvantageous positions learn more conservative or evasive behaviors. To provide a more intuitive characterization of the benchmark opponent pool, representative engagement scenarios of the eight opponents are illustrated in Figure~\ref{fig:benchmark_show}, where the red aircraft denotes the benchmark opponent. As shown in the figure, the selected opponents exhibit different tactical preferences, including spiral offensive maneuvers, weaving attacks, and evasive disengagement behaviors.
+To evaluate the generalization ability and tactical performance of the models, we construct a standardized benchmark opponent pool of eight policies. These opponents are selected snapshots obtained from various training iterations and configurations. Their behavioural differences are induced by the reward terms on which they were trained, since the initial engagement geometry is randomized in the same way for all of them; the pool therefore spans a range of flight behaviour rather than a range of engagement geometries. Because a qualitative description of eight policies is difficult to verify, every opponent is characterized by direct measurement as set out below and summarized in Table~\ref{tab:bench_behaviour}. Representative engagement scenarios of the eight opponents are illustrated in Figure~\ref{fig:benchmark_show}, where the red aircraft denotes the benchmark opponent.
+
+To describe the behaviour of the benchmark opponents quantitatively, each of the eight policies was flown for $60$\,s from an identical initial condition and its own control commands, attitude and trajectory were recorded at every decision step. The opposing aircraft is a scripted constant-command drone that is identical for all eight policies, so the only quantity that differs between the episodes is the behaviour of the opponent being measured. No reward is used in this measurement, and no engagement outcome is scored; the reported quantities therefore describe how a policy flies rather than how well it performs. Table~\ref{tab:bench_behaviour} reports five of them. The mean bank angle $|\phi|$ measures how steeply a policy is willing to bank. The mean climb rate separates a policy that gains altitude from one that loses it. The mean elevator command distinguishes a policy that holds a sustained pull from one that remains close to trim. The mean speed indicates the airspeed the policy settles at, and the mean closure rate towards the other aircraft is positive when a policy reduces the range and negative when it opens it.
+
+Five behaviour classes emerge from these measurements, and their measured signatures are as follows.
+
+\begin{itemize}
+    \item \textbf{Class I (opponent 1), sustained maximum-manoeuvre flight.} This is the only policy that flies at full throttle throughout, and its mean elevator command saturates at $-1.000$, that is, it holds a full nose-up command for the whole engagement. It banks steeply ($86.3^{\circ}$ on average, and more than $60^{\circ}$ for $66\%$ of the time), turns fastest of all eight policies, and climbs continuously at $+113.8$~ft/s, reaching the highest mean speed and the highest specific energy of the pool.
+    \item \textbf{Class II (opponent 2), high-manoeuvre energy trade.} This policy manoeuvres nearly as hard as opponent~1 ($60.1^{\circ}$ mean bank, $48\%$ of the time above $60^{\circ}$) but throttles back to an idle setting, and it shows the highest control activity and the highest roll-reversal rate of the pool. Its mean speed and its specific energy are the lowest of the eight, which identifies it as a policy that trades energy for angular advantage.
+    \item \textbf{Class III (opponent 3), moderate manoeuvre.} Bank angle ($47.8^{\circ}$), turn rate and elevator command ($-0.236$) all lie between those of classes~I--II and those of class~V, and the policy also throttles back. It is best described as an intermediate case between sustained manoeuvring and level flight.
+    \item \textbf{Class IV (opponent 4), steady descent.} This is the only policy whose altitude falls throughout: it descends at $-374.4$~ft/s on average, climbs during $1\%$ of the episode, and never exceeds a mean bank of $8.1^{\circ}$ or an elevator command of $+0.033$, that is, it neither turns nor pulls. Its airspeed is high ($847$~ft/s) because it accelerates in the descent, and the episodes recorded for this opponent are correspondingly shorter than those of the other seven.
+    \item \textbf{Class V (opponents 5--8), near-level cruise flight.} These four policies hold a small bank angle ($3.2^{\circ}$ to $24.2^{\circ}$), keep the elevator command within $0.17$ of trim, and reverse their roll essentially never; their speed range spreads more widely ($444$ to $700$~ft/s) than their manoeuvring does. Opponent~6 is the most manoeuvrable member of this class, which is why its bank angle is reported separately in the table.
+\end{itemize}
+
+Two properties of the pool follow directly from these numbers. First, the pool is strongly asymmetric in manoeuvre intensity. Opponents~1--3 fly with a mean bank between $47.8^{\circ}$ and $86.3^{\circ}$ and a sustained pull on the elevator, whereas opponents~5--8 remain close to level flight with a mean bank below $25^{\circ}$ and an elevator command within $0.17$ of trim. Any evaluation that reports a single aggregate over the eight opponents therefore mixes two very different regimes, and the win rates reported below are weighted accordingly by the composition of the pool. Second, none of the eight opponents directs its manoeuvring at the other aircraft in this measurement. The mean closure rate is negative for all eight policies, and the fraction of a policy's turning that is explained by the line-of-sight angle to the other aircraft does not exceed $R^{2}=0.11$ for any of them, with five of the eight below $0.02$. This is consistent with the reward functions on which the opponents were trained: opponents~5--8 are level-flight policies whose reward contains only flight-quality terms, namely control smoothing, altitude containment and roll suppression, and no term that depends on the relative geometry, so target-directed behaviour is not expected of them. The benchmark pool is therefore best read as a ladder of flight behaviour rather than of adversarial pressure, and it should not be assumed that all eight opponents actively contest the engagement.
+
+\begin{table}[h]
+\caption{Measured flight behaviour of the eight benchmark opponents, grouped into five behaviour classes. Every policy was flown for $60$\,s from an identical initial condition with its own control commands and trajectory recorded; the opposing aircraft is a scripted constant-command drone common to all eight policies, and no reward or engagement outcome is used. Units: mean bank angle $|\phi|$ in degrees, climb rate in ft/s, elevator command normalised to $[-1,1]$ with a negative command pitching the nose up, speed in ft/s and closure rate in ft/s.}\label{tab:bench_behaviour}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}clrrrrr}
+\toprule
+Class & Opp. & Mean $|\phi|$ & Climb rate & Elevator cmd & Speed & Closure to opp. \\
+\midrule
+I   & 1 & 86.3 & $+113.8$ & $-1.000$ & 888 & $-155$ \\
+\midrule
+II  & 2 & 60.1 & $+6.4$   & $-0.618$ & 475 & $-394$ \\
+\midrule
+III & 3 & 47.8 & $+36.0$  & $-0.236$ & 572 & $-297$ \\
+\midrule
+IV  & 4 & 8.1  & $-374.4$ & $+0.033$ & 847 & $-102$ \\
+\midrule
+V   & 5 & 5.1  & $+39.0$  & $-0.066$ & 566 & $-358$ \\
+    & 6 & 24.2 & $-7.7$   & $-0.078$ & 700 & $-549$ \\
+    & 7 & 10.2 & $+66.6$  & $-0.105$ & 509 & $-341$ \\
+    & 8 & 3.2  & $+33.2$  & $-0.165$ & 444 & $-500$ \\
+\botrule
+\end{tabular*}
+\end{table}
+
+% To evaluate the generalization ability and tactical performance of the models, we construct a standardized benchmark opponent pool of eight policies. The individual capability of these opponents is not the primary concern; rather, their flight states should cover as many conditions as possible, providing a diverse evaluation environment for the models under evaluation. The measured flight behaviour of the opponents is summarized in Table~\ref{tab:bench_behaviour}.
+
+% To describe the behaviour of the benchmark opponents quantitatively, each of the eight policies was flown for $60$\,s from an identical initial condition and its control commands, attitude and trajectory were recorded at every decision step. The opposing aircraft is a scripted constant-command drone that is identical for all eight policies. The reported quantities describe how a policy flies rather than how well it performs. Table~\ref{tab:bench_behaviour} reports five of them. The mean bank angle $|\phi|$ measures how steeply a policy is willing to bank. The mean climb rate separates a policy that gains altitude from one that loses it. The mean elevator command distinguishes a policy that holds a sustained pull from one that remains close to trim. The mean speed indicates the airspeed the policy settles at, and the mean closure rate towards the other aircraft is positive when a policy reduces the range and negative when it opens it.
+
+% Five behaviour classes emerge from these measurements, and their measured signatures are as follows.
+
+% \begin{itemize}
+%     \item \textbf{Class I (opponent 1), sustained maximum-manoeuvre flight.} This policy flies at full throttle throughout the recorded episode, and its mean elevator command saturates at $-1.000$, indicating a sustained full nose-up command over the engagement. It banks steeply ($86.3^{\circ}$ on average, and more than $60^{\circ}$ for $66\%$ of the time), shows a high turn rate relative to the pool, and climbs continuously at $+113.8$~ft/s, with mean speed and specific energy that are high relative to the other policies.
+%     \item \textbf{Class II (opponent 2), high-manoeuvre energy trade.} This policy manoeuvres nearly as hard as opponent~1 ($60.1^{\circ}$ mean bank, $48\%$ of the time above $60^{\circ}$) but throttles back to an idle setting, and it shows comparatively high control activity and roll-reversal rate within the pool. Its mean speed and specific energy are relatively low among the eight, suggesting a policy that trades energy for angular advantage.
+%     \item \textbf{Class III (opponent 3), moderate manoeuvre.} Bank angle ($47.8^{\circ}$), turn rate and elevator command ($-0.236$) lie between those of classes~I--II and class~V, and the policy also throttles back. It can be described as an intermediate case between sustained manoeuvring and level flight.
+%     \item \textbf{Class IV (opponent 4), steady descent.} This policy is characterized by a sustained descent: its altitude falls over the episode, at $-374.4$~ft/s on average, it climbs during $1\%$ of the episode, and its mean bank and elevator command remain low ($8.1^{\circ}$ and $+0.033$, respectively), indicating limited turning and pulling. Its airspeed is high ($847$~ft/s), as it accelerates in the descent, and the recorded episodes for this opponent are correspondingly shorter than those of most other opponents.
+%     \item \textbf{Class V (opponents 5--8), near-level cruise flight.} These four policies hold relatively small bank angles ($3.2^{\circ}$ to $24.2^{\circ}$), keep the elevator command within $0.17$ of trim, and show little roll reversal; their speed range spreads more widely ($444$ to $700$~ft/s) than their manoeuvring does.
+% \end{itemize}
+
+% \begin{table}[h]
+% \caption{Measured flight behaviour of the eight benchmark opponents, grouped into five behaviour classes.}\label{tab:bench_behaviour}
+% \small
+% \begin{tabular*}{\textwidth}{@{\extracolsep\fill}clrrrrr}
+% \toprule
+% Class & Opp. & Mean $|\phi|$ (deg) & Climb rate (ft/s) & Elevator cmd & Speed (ft/s) & Closure to opp. (ft/s) \\
+% \midrule
+% I   & 1 & 86.3 & $+113.8$ & $-1.000$ & 888 & $-155$ \\
+% \midrule
+% II  & 2 & 60.1 & $+6.4$   & $-0.618$ & 475 & $-394$ \\
+% \midrule
+% III & 3 & 47.8 & $+36.0$  & $-0.236$ & 572 & $-297$ \\
+% \midrule
+% IV  & 4 & 8.1  & $-374.4$ & $+0.033$ & 847 & $-102$ \\
+% \midrule
+% V   & 5 & 5.1  & $+39.0$  & $-0.066$ & 566 & $-358$ \\
+%     & 6 & 24.2 & $-7.7$   & $-0.078$ & 700 & $-549$ \\
+%     & 7 & 10.2 & $+66.6$  & $-0.105$ & 509 & $-341$ \\
+%     & 8 & 3.2  & $+33.2$  & $-0.165$ & 444 & $-500$ \\
+% \bottomrule
+% \end{tabular*}
+% \end{table}
+
+% The opponents cover a range of different manoeuvre styles. The benchmark opponents and their predecessor checkpoints are used exclusively during evaluation and do not participate in the training process. The reward functions with which these benchmark opponents were trained have been defined above. Opponents~2--4 were trained as the ego aircraft of the stage-2 combat task, so their reward consists of the five terms of Table~\ref{tab:reward_stage2} together with the terminal terms of Table~\ref{tab:reward_terminal}; they are the only opponents in the pool whose reward depends on the outcome of the engagement. The stage-2 reward under which these three opponents were trained also contained a unit-weight control-magnitude penalty $r_{sa}=-(|\delta_a|+|\delta_e|)$ that discourages large aileron and elevator commands; this term was removed after training and is therefore not listed in Table~\ref{tab:reward_stage2}. It was retained for the benchmark opponents to encourage stable control, which is desirable for evaluation opponents, but omitted for the models under evaluation because it can restrict manoeuvring flexibility and thus limit peak performance. Opponents~5--8 were trained on the auxiliary opponent task, whose reward contains no term that depends on the relative geometry: opponents~5 and~8 were trained with the roll-angle penalty of Table~\ref{tab:reward_stage1} alone together with the low-altitude penalty of Table~\ref{tab:reward_stage2}; opponent~6 adds the action smoothness and altitude stability penalties of Table~\ref{tab:reward_stage1}; and opponent~7 adds the aileron and throttle command penalties of the same table. Within this auxiliary task the low-altitude penalty is applied with $h_{\mathrm{deck}}=3000$\,ft and $k_{h}=1/200$\,ft$^{-1}$ instead of the values used for the ego task, and no terminal term is applied at all, so that these four policies are neither rewarded nor penalised for the outcome of an engagement. Opponent~1 is the goalpoint navigation policy introduced in Section~\ref{sec:dynamic_opponent_pool}, whose reward is the auxiliary-task reward of Eqs.~(\ref{eq:goalpoint_dist}) and~(\ref{eq:goalpoint_head}) together with the aileron magnitude, action smoothness and low-altitude penalties described in that section, and whose terminal reward is the arrival bonus and the crash penalty of that auxiliary task rather than the health and kill terms of Table~\ref{tab:reward_terminal}.
 
 \begin{figure}[h]
 \centering
