@@ -282,80 +282,95 @@ def plot_win_rates(data_dict, save_path="src/evaluation/plot/model_win_rates.png
     plt.show()
     print(f"Plot saved successfully to {save_path}")
 
-def plot_capability_metrics(data_dict, save_path="src/evaluation/plot/model_capabilities.png"):
-    """绘制 2x2 网格结构的详细指标对比图"""
-    # 统一使用 tick 样式，与图1一致
+CAPABILITY_JSON = "experiments/capability_profile/paper/merged.json"
+MODEL_ORDER = ["Baseline", "BC", "BD", "BDC-MLP", "BDC-LSTM"]
+
+
+def load_capability_metrics(path=CAPABILITY_JSON):
+    """Aggregate the reward-independent capability metrics of the five models.
+
+    The measurements come from scripts/ablation/measure_capability_profile.py,
+    which evaluates the models against the benchmark opponents with the same
+    protocol as the benchmark evaluation (randomised initial states,
+    goal_point_prob = 0) and reads the quantities of interest from the simulator
+    at every decision step.  Only the two metrics reported in the paper are
+    returned:
+
+        dEs    mean specific-energy margin over the opponent, Es = h + V^2/(2g)
+        R2     squared correlation between the line-of-sight angle to the
+               opponent and the signed aerodynamic turn rate g*sqrt(n^2-1)/V
+
+    Neither of them appears in any term of the reward function the models were
+    trained with, which is why they replace the previous panel of gun
+    opportunity, specific energy, track angle and damage.
+    """
+    import json
+    recs = [r for r in json.load(open(path)) if r.get("ok")]
+    out = {}
+    for model in MODEL_ORDER:
+        rs = [r for r in recs if r["model"] == model]
+        if not rs:
+            continue
+        w = sum(r["n_episodes"] for r in rs)
+        out[model] = {
+            "dEs": sum(r["metrics"]["dEs"] * r["n_episodes"] for r in rs) / w,
+            "R2": sum(r["metrics"]["react_r2_phys"] * r["n_episodes"] for r in rs) / w,
+            "episodes_per_pair": rs[0]["n_episodes"],
+            "n_opponents": len(rs),
+        }
+    return out
+
+
+def plot_capability_metrics(data_dict=None, save_path="src/evaluation/plot/model_capabilities.png"):
+    """1x2 comparison of the two reward-independent capability metrics."""
+    if data_dict is None:
+        data_dict = load_capability_metrics()
+
     sns.set_theme(style="ticks", context="paper")
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Times New Roman"],
-        "axes.titlesize": 17,
-        "axes.labelsize": 16,
-        "xtick.labelsize": 15,
-        "ytick.labelsize": 15,
+        "axes.titlesize": 16,
+        "axes.labelsize": 15,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
         "hatch.linewidth": 0.5,
     })
-    
-    models = list(data_dict.keys())
-    # 提取四个绘图用的指标列表
-    metrics = {
-        "Gun Opportunity Ratio (↑ Better) (%)": [data_dict[m]["Gun Opportunity"] * 100 for m in models],
-        "Mean Specific Energy (↑ Better) (ft)": [data_dict[m]["Specific Energy"] for m in models],
-        "Mean Track Angle (↓ Better) (rad)": [data_dict[m]["Track Angle"] for m in models],
-        # 修改：将 Overshoot 改为 Total Damage to Oppo（不乘以 100，因为它是总伤害值）
-        "Total Damage to Opponent (↑ Better)": [data_dict[m]["Damage to Oppo"] for m in models]
-    }
-    
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-    axes = axes.flatten()
-    
-    # 统一将所有条形图设置为蓝色
+
+    models = [m for m in MODEL_ORDER if m in data_dict]
+    labels = [m.replace("BDC-", "BDC-\n") for m in models]
+    metrics = [
+        ("Mean Specific-Energy Margin (\u2191 Better) (ft)",
+         [data_dict[m]["dEs"] for m in models], "%.0f"),
+        ("LOS Turning $R^2$ (\u2191 Better)",
+         [data_dict[m]["R2"] for m in models], "%.2f"),
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
     bar_color = '#307bb5'
     x_pos = np.arange(len(models))
     width = 0.5
-    
-    # 获取支持多行展示的模型名称（用换行符替换某些空格或长文本中的截断）
-    # 如果字符串较长，根据空格或特征符号将其分成两行
-    wrapped_models = []
-    for m in models:
-        # 如果包含 '+'（例如 Baseline + Dynamic Pool），在 '+' 后面换行
-        if '-' in m:
-            m_wrapped = m.replace('-', ' \n')
-        # 如果名字较长且存在空格，则挑一个主要空格进行折行
-        elif len(m) > 12 and ' ' in m:
-            parts = m.split(' ', 1)
-            m_wrapped = f"{parts[0]}\n{parts[1]}"
-        else:
-            m_wrapped = m
-        wrapped_models.append(m_wrapped)
 
-    for i, (title, vals) in enumerate(metrics.items()):
-        ax = axes[i]
-        # 使用统一蓝色，并保持细边框
+    for ax, (title, vals, fmt) in zip(axes, metrics):
         bars = ax.bar(x_pos, vals, width, color=bar_color, edgecolor="black", linewidth=0.5)
-        
-        # 略微增加标题和图之间的距离，修改 pad 为 15
-        ax.set_title(title, fontweight='bold', pad=20)
+        ax.set_title(title, fontweight='bold', pad=15, fontsize=15)
         ax.set_xticks(x_pos)
-        # 旋转角度调整为 0，因为多行文本不需要太大倾斜，或者保持极小倾斜角
-        ax.set_xticklabels(wrapped_models, rotation=0, ha='center', fontweight='bold')
-        
-        # 添加在柱形上的数值标注
+        ax.set_xticklabels(labels, rotation=0, ha='center', fontweight='bold')
+        lo, hi = min(vals + [0.0]), max(vals + [0.0])
+        pad = 0.22 * (hi - lo) if hi > lo else 1.0
+        ax.set_ylim(lo - pad, hi + 0.30 * (hi - lo if hi > lo else 1.0))
+        if lo < 0:
+            ax.axhline(0.0, color='black', linewidth=1.0)
         for bar in bars:
-            height = bar.get_height()
-            # 动态判断标注格式：针对极大或极小的差别处理
-            fmt = f"{height:.1f}" if height > 10 else f"{height:.3f}"
-            ax.annotate(fmt,
-                        xy=(bar.get_x() + bar.get_width() / 2, height),
-                        xytext=(0, 3),  # 3 points vertical offset
+            h = bar.get_height()
+            ax.annotate(fmt % h,
+                        xy=(bar.get_x() + bar.get_width() / 2, h),
+                        xytext=(0, 3 if h >= 0 else -14),
                         textcoords="offset points",
-                        ha='center', va='bottom', fontsize=13, fontname='Times New Roman', fontweight='bold')
-        
-        # 统一的网格与坐标轴边框样式（与图1完全对齐）
+                        ha='center', va='bottom' if h >= 0 else 'top',
+                        fontsize=12, fontname='Times New Roman', fontweight='bold')
         ax.yaxis.grid(True, linestyle='--', alpha=0.7, color='grey')
         ax.set_axisbelow(True)
-        
-        # 去除多余边框且将保留的边框线加粗
         sns.despine(ax=ax, top=True, right=True)
         ax.spines['bottom'].set_linewidth(1.2)
         ax.spines['left'].set_linewidth(1.2)
@@ -363,7 +378,8 @@ def plot_capability_metrics(data_dict, save_path="src/evaluation/plot/model_capa
     plt.tight_layout()
     plt.savefig(save_path, dpi=300, bbox_inches='tight', transparent=False)
     plt.show()
-    print(f"Capability plots saved successfully to {save_path}")
+    print("Capability plots saved successfully to %s" % save_path)
+    return data_dict
 
 def main():
     parsed_data = parse_eval_text(eval_result)
@@ -375,7 +391,11 @@ def main():
     
     # 调用绘图逻辑
     plot_win_rates(parsed_data)
-    plot_capability_metrics(parsed_data)
+    # 能力指标图改为读取奖励无关指标的实测数据（scripts/ablation/measure_capability_profile.py）
+    capability = load_capability_metrics()
+    print("Capability metrics:")
+    pprint.pprint(capability)
+    plot_capability_metrics(capability)
 
 if __name__ == "__main__":
     main()

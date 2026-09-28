@@ -878,18 +878,34 @@ Five models are compared: the baseline model (Baseline), a model with curriculum
 \includegraphics[width=0.9\textwidth]{graph/model_win_rates.png}
 \caption{Win, draw, and loss rates of different models against the benchmark opponent pool over $8\times 1000$ simulated engagements per model.}\label{fig:win_rate}
 \end{figure}
+\begin{table}[!htbp]
+\caption{Capability metrics of the five compared models, measured with the protocol of Section~\ref{sec:eval_benchmark} ($8\times150$ engagements per model with randomised initial states). $\Delta E_s$ is the mean specific-energy margin over the opponent, and the line-of-sight figure $R^{2}$ is the squared correlation between the line-of-sight angle to the opponent and the signed turn rate, the sign being taken from the bank angle so that the heading changes produced by rolling do not contaminate the estimator. Neither quantity appears in any term of the reward function, so the comparison is not circular.}
+\label{tab:reward_free_metrics}
+\small
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lrr}
+\toprule
+Model & $\Delta E_s$ (ft) & LOS $R^2$ \\
+\midrule
+Baseline & -2941 & 0.24 \\
+BC & +1526 & 0.22 \\
+BD & +1815 & 0.24 \\
+BDC-MLP & +3758 & 0.35 \\
+BDC-LSTM & +4679 & 0.36 \\
+\botrule
+\end{tabular*}
+\end{table}
+
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{graph/model_capabilities.png}
-\caption{Comparison of key air-combat metrics, including gun opportunity ratio, mean specific energy, mean track angle, and total damage to the opponent.}\label{fig:combat_metrics}
+\includegraphics[width=0.95\textwidth]{graph/model_capabilities.png}
+\caption{Comparison of the reward-independent capability metrics of the five models: mean specific-energy margin over the opponent (left) and line-of-sight turning figure $R^{2}$ (right), evaluated over the same engagements as Table~\ref{tab:reward_free_metrics}.}\label{fig:capability_metrics}
 \end{figure}
 
 Figure~\ref{fig:win_rate} shows the win/draw/loss distributions on the benchmark opponent pool. The Baseline is almost unable to secure victories, achieving a win rate of only 0.42\%, with the vast majority of engagements ending in draws. This indicates that training only against fixed simple opponents may lead to policy overfitting. After introducing curriculum learning and the dynamic opponent pool separately, the win rates increase to 22.4\% and 33.3\%, respectively, showing that both components can independently improve generalization performance. The BDC method further improves the overall adversarial performance, with BDC-MLP and BDC-LSTM achieving win rates of 41.0\% and 55.6\%, respectively. The BDC-LSTM model therefore outperforms the baseline by approximately 55.2 percentage points.
 
-Fig.~\ref{fig:combat_metrics} further compares four key air-combat metrics. The gun opportunity ratio is defined as the proportion of the total engagement time during which the opponent remains within the aircraft’s weapons engagement zone. The mean specific energy denotes the aircraft's average specific energy (calculated as $E_s = h + \frac{V_T^2}{2g}$, where $h$ is the altitude, $V_T$ is the true velocity, and $g$ is the gravitational acceleration) over the course of the engagement. Maintaining a higher level of specific energy is important in dogfight scenarios \cite{energy1, energy2}, as it reflects the policy's ability to manage the conversion between kinetic and potential energy, which is often critical for gaining positional and tactical advantages during engagement. Mean track angle refers to the average track angle of the aircraft, where a smaller value indicates stronger target-following capability. The total damage to opponent denotes the average total damage to opponent in the whole engagement.
+Table~\ref{tab:reward_free_metrics} and Figure~\ref{fig:capability_metrics} report the energy margin and line-of-sight figure $R^{2}$ for the five models. The energy margin $\Delta E_s$ is the mean difference between the specific energies of the two aircraft, $E_s=h+V_T^{2}/(2g)$, where $h$ is the altitude, $V_T$ the true airspeed and $g$ the gravitational acceleration. Holding a higher specific energy than the opponent is the objective of the energy-fight tactic \cite{energy1,energy2}, because that energy can later be converted into a firing position, whereas the reward compares the two aircraft only through their angles and their range. The line-of-sight figure $R^{2}$ is the squared correlation between the line-of-sight angle to the opponent and the signed turn rate, the sign being taken from the bank angle so that the heading changes caused by rolling do not contaminate the estimator. It is the fraction of the policy's turning that is explained by the position of the adversary, and it therefore separates a policy that steers by the opponent from one that follows a trajectory of its own; it cannot be optimized directly, because the reward contains no term in the turn rate.
 
-First, in terms of gun opportunity ratio, BDC-MLP and BDC-LSTM reach 16.0\% and 19.1\%, respectively, which are higher than 0.92\% achieved by the baseline. This indicates that the BDC method can maintain the opponent within an effective firing envelope more consistently. Second, for mean specific energy, the BDC method outperforms the compared methods, with BDC-LSTM reaching 22401~ft, suggesting better energy retention during high-maneuver engagements. Third, in mean track angle, BDC-LSTM obtains the best result (0.696~rad), indicating that it can maintain a more favorable target-pointing condition in complex engagements. Lastly, the BDC method also achieves the highest score in the total damage to opponent metric, inflicting the most damage on the adversary.
-
+Both quantities separate the models in the same way as the outcome statistics. The energy margin is the clearest of them: it increases monotonically with the win rate, from $-2941$~ft for the baseline to $+4679$~ft for BDC-LSTM, and BDC-LSTM is the only model that finishes all eight matchups with a positive margin, its smallest value being $+2955$~ft, whereas the baseline finishes six of the eight with a negative margin. The line-of-sight figure distinguishes the two variants of the proposed method from the other three models: BDC-MLP and BDC-LSTM reach $R^{2}=0.35$ and $0.36$, against $0.22$ to $0.24$ for the baseline, BC and BD. A larger part of their turning is therefore accounted for by the position of the adversary, which is the behaviour expected of a policy that manoeuvres in response to the opponent instead of following a trajectory of its own.
 
 \subsubsection{Cross-Play Evaluation}
 \label{sec:cross_play}
@@ -956,7 +972,7 @@ In Figure~\ref{fig:heatmap_crossplay}, the color indicates the HP difference bet
 We can also present the detailed engagement results between BDC-LSTM and BDC-MLP. Since both are trained with the proposed method and therefore have similar performance, the proportion of draws in their direct encounters is high. To further analyze their differences, Figure~\ref{fig:violin_hp_energy} presents the distributions of remaining HP and specific energy in cross-play.
 
 
-As shown in Figure~\ref{fig:violin_hp_energy}, BDC-LSTM outperforms BDC-MLP in direct competition. Their win rates are 6.2\% and 0.9\%, respectively, and BDC-LSTM also attains a higher average remaining HP (2.6 vs.\ 2.3). Meanwhile, the average specific energy of BDC-LSTM is approximately 20388~ft, which is higher than the 13499~ft of BDC-MLP, indicating better energy management during engagements.
+As shown in Figure~\ref{fig:violin_hp_energy}, BDC-LSTM outperforms BDC-MLP in direct competition. Their win rates are 6.2\% and 0.9\%, respectively, and BDC-LSTM also attains a higher average remaining HP (2.6 vs.\ 2.3). Meanwhile, the average specific energy of BDC-LSTM is approximately 20388~ft, which is higher than the 13499~ft of BDC-MLP, indicating a larger energy margin over the opponent during the engagement, in agreement with the engagement-level energy margin of Table~\ref{tab:reward_free_metrics}.
 
 In addition, the two models exhibit different energy distribution patterns. BDC-MLP shows a concentrated unimodal distribution, whereas BDC-LSTM presents a bimodal characteristic. This suggests that the LSTM architecture may help the policy develop more differentiated energy-utilization modes under different engagement situations. These findings suggest that incorporating temporal memory may improve decision-making flexibility in adversarial combat.
 
@@ -1059,7 +1075,7 @@ Overall, the results of this ablation indicate that the initialization of the op
 \section{Conclusion}
 \label{sec:conclusion}
 
-This paper proposes a reinforcement learning framework for within-visual-range autonomous air combat, providing a solution with generalization and robustness. Through the integration of curriculum learning and dynamic opponent pool, the proposed framework stabilizes training and mitigates cyclic dominance. Experimental evaluations indicate that the proposed method yields competitive performance against baseline methods in terms of win rate and energy management. Ultimately, this work offers a viable baseline for addressing flight control and tactical decision-making in autonomous dogfighting.
+This paper proposes a reinforcement learning framework for within-visual-range autonomous air combat, providing a solution with generalization and robustness. Through the integration of curriculum learning and dynamic opponent pool, the proposed framework stabilizes training and mitigates cyclic dominance. Experimental evaluations indicate that the proposed method yields competitive performance against baseline methods in terms of win rate and of the energy margin that it holds over the opponent. Ultimately, this work offers a viable baseline for addressing flight control and tactical decision-making in autonomous dogfighting.
 
 
 \begin{appendices}
